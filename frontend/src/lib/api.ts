@@ -24,7 +24,11 @@ async function request<T>(
   };
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  // 默认 30s 超时，调用方可传 signal 覆盖（如 analyze 传 300s）
+  const signal = options.signal ?? AbortSignal.timeout(30_000);
+  const { signal: _, ...rest } = options;
+
+  const res = await fetch(`${API_URL}${path}`, { ...rest, headers, signal });
 
   // 401/403 统一处理：清除 token，跳转登录页
   if (res.status === 401 || res.status === 403) {

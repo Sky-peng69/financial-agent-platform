@@ -9,19 +9,60 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
+  function fetchTask() {
+    setLoading(true);
+    setError("");
     tasksApi
       .get(id)
       .then(setTask)
-      .catch(console.error)
+      .catch((err: any) => setError(err.message || "加载失败"))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    fetchTask();
   }, [id]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full py-24">
-        <div className="w-7 h-7 border-2 border-[#C9A94E]/30 border-t-[#C9A94E] rounded-full animate-spin" />
+      <div className="max-w-4xl mx-auto px-6 py-8 animate-fade-up">
+        {/* Breadcrumb skeleton */}
+        <div className="flex items-center gap-2 text-xs mb-6">
+          <div className="h-3 w-16 bg-[#1E2A3E] rounded-sm animate-pulse" />
+          <div className="h-3 w-3 bg-[#1E2A3E] rounded-sm animate-pulse" />
+          <div className="h-3 w-32 bg-[#1E2A3E] rounded-sm animate-pulse" />
+        </div>
+        {/* Meta card skeleton */}
+        <div className="card p-6 mb-6 space-y-3">
+          <div className="h-6 bg-[#1E2A3E] rounded-sm animate-pulse w-3/4" />
+          <div className="h-4 bg-[#1E2A3E] rounded-sm animate-pulse w-1/2" />
+        </div>
+        {/* Content skeleton */}
+        <div className="card p-6 space-y-3">
+          <div className="h-5 bg-[#1E2A3E] rounded-sm animate-pulse w-1/3" />
+          <div className="h-4 bg-[#1E2A3E] rounded-sm animate-pulse w-full" />
+          <div className="h-4 bg-[#1E2A3E] rounded-sm animate-pulse w-5/6" />
+          <div className="h-4 bg-[#1E2A3E] rounded-sm animate-pulse w-2/3" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-8 animate-fade-up">
+        <div className="bg-[#3D1A1A] border border-[#D95A4A]/30 rounded-sm px-6 py-8 text-center">
+          <p className="text-[#D95A4A] text-sm font-semibold mb-2">加载失败</p>
+          <p className="text-[#D95A4A]/70 text-sm mb-4">{error}</p>
+          <button
+            className="text-[#C9A94E] text-sm hover:text-[#D4B85A] transition-colors"
+            onClick={fetchTask}
+          >
+            重试
+          </button>
+        </div>
       </div>
     );
   }
