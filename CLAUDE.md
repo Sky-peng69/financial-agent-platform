@@ -18,60 +18,320 @@
 | Commander 编排 | ✅ 已验证 | `POST /api/agents/analyze` 端到端跑通：Commander 规划 4 子任务 → 3 Specialist 并行 → 生成 2659 字报告 |
 | 6 个 Specialist | ✅ | 含 registry.py + agent_runner.py |
 | 单 Agent 运行 | ✅ | `POST /api/agents/{name}/run` |
-| Dashboard 智能分析 | ✅ 已接入 | `api.ts` 新增 `analyze()`，首页新增 Commander 输入卡片（编译通过） |
-| 前端任务详情 | ⚠️ 未解析 JSON | Commander JSON 仍原样显示 |
-| 前端错误处理 | ⚠️ 最小状态 | analyze 有基本 loading/error/retry，但 `request()` 未统一超时 |
+| Dashboard 智能分析 | ✅ 已接入 | `api.ts` 新增 `analyze()`，首页新增 Commander 输入卡片 |
+| 全局侧边栏 | ✅ Codex 风格 | `components/Sidebar.tsx` — 可折叠、近期任务列表、导航高亮 |
+| Agent placeholder | ✅ 已差异化 | 每个 Agent 页面显示专属输入示例 |
+| SSE 流式输出 | ❌ 待实现 | 见 Demo-Task 4 — 单 Agent 运行目前同步等待，需改为流式 |
+| 前端超时/Abort | ⚠️ 已移除默认超时 | `request()` 不再设默认 30s（之前导致非 analyze 请求也被 abort） |
 | PostgreSQL | ✅ | :5433 |
 | Redis | ✅ | :6379 |
 | Docker | ✅ | 镜像已重建，bcrypt==4.1.3 持久固化 |
-| Git | ✅ | commit `6df8d2e` |
+| GitHub | ✅ | `truongthimy405-cell/financial-agent-platform`，remote origin 已配置 |
 
-## Demo 任务清单（聚焦跑通核心链路）
+## Demo 任务清单
 
 > Demo 目标：用户输入问题 → Commander 规划 → 多 Specialist 并行 → 展示综合报告。
-> 后端编排引擎已就绪，以下全为前端接入工作。
+> ✅ Demo-Task 1~3 已完成。当前唯一待做任务：
 
-### Demo-Task 1: api.ts 新增 analyze + Dashboard 智能分析入口 🔥
+### ~~Demo-Task 1: api.ts 新增 analyze + Dashboard 智能分析入口~~ ✅ 已完成
 
-**为什么**：后端 `POST /api/agents/analyze` 已可用，前端缺 `analyze()` 方法和交互入口。
+### ~~Demo-Task 2: 任务详情页解析 Commander JSON~~ ✅ 已完成
 
-**做什么**：
-
-1. `frontend/src/lib/api.ts` — 新增 `agents.analyze(title, inputData)`，超时 5 分钟
-2. `frontend/src/app/dashboard/page.tsx` — Agent 列表上方新增"智能分析"输入卡片
-3. 交互流程：输入问题 → 点分析 → loading → 展示 Commander 计划 + 各专家结果 + 综合报告
-
-**判定标准**：输入"分析茅台是否值得投资"→ Commander 分配 Agent → 页面展示报告。
-
-> 📌 调 `Skill:frontend-design` 做 UI
+### ~~Demo-Task 3: 基础错误处理~~ ✅ 已完成（`request()` 已移除默认 30s 超时，analyze/run 各设独立超时）
 
 ---
 
-### Demo-Task 2: 任务详情页解析 Commander JSON
+### Demo-Task 4: 单 Agent 运行改为 SSE 流式输出 🔥
 
-**为什么**：Commander 任务的 `input_data` 是 JSON（plan + subtask_results），当前原样显示字符串，不可读。
+**为什么**：当前 `POST /api/agents/{name}/run` 同步等待 DeepSeek 响应完才返回，用户面对白屏干等几分钟。需要像 DeepSeek Chat 一样实时流式输出，让用户看到 AI 思考进度，同时避免前端超时 abort。
 
-**做什么**：
+**现有基础（不需要重写）**：
+- `backend/app/services/llm.py` — `chat_stream()` 已实现，返回 `AsyncGenerator[str, None]`
+- `sse-starlette` 已安装（3.4.4）
+- `backend/app/services/agent_runner.py` — `run_agent_stream()` 目前用非流式调用，需改
+- `backend/app/models/__init__.py` — Task 模型有 `output_data: Text` 字段
 
-1. `frontend/src/app/dashboard/tasks/[id]/page.tsx` — 检测 `agent_name === "commander"`，解析 JSON
-2. 展示：编排计划（各子任务状态）+ 各 Specialist 结果折叠面板 + 综合报告
+**后端要做的事**：
 
-**判定标准**：Commander 任务详情页看到各专家分析，而非一串 JSON。
+#### Step 1: 修改 `agent_runner.py` — 新增流式运行函数
 
----
+在现有 `run_agent_stream()` 下方新增 `run_agent_sse()`：
 
-### Demo-Task 3: 基础错误处理（超时 + 重试 + 友好提示）
+```python
+# backend/app/services/agent_runner.py 新增
 
-**为什么**：`request()` 无超时，Analyze 可能跑几分钟，失败时前端白屏。
+import uuid
+from datetime import datetime, timezone
+from app.models import Task, TaskStatus
 
-**做什么**：
+async def run_agent_sse(
+    agent_name: str,
+    title: str,
+    user_input: str,
+    user_id: str,
+    db: AsyncSession,
+):
+    """
+    SSE 流式运行单个 Agent。
+    先创建 Task (status=running)，流式产出 chunk，结束后更新 Task 并 yield 最终结果。
+    """
+    from app.agents.registry import get_specialist_prompt
+    from app.services.llm import get_client
 
-1. `api.ts` 的 `request()` — 增加 AbortController 超时（默认 30s，analyze 用 300s）
-2. 前端结果区 — loading 骨架屏 + 错误卡片 + 重试按钮
+    system_prompt = get_specialist_prompt(agent_name) or ""
+    client = get_client()
 
-**判定标准**：API 失败时前端不白屏，长时间任务不卡死。
+    # 1) 创建 running 状态的 Task
+    task = Task(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        agent_name=agent_name,
+        title=title,
+        input_data=user_input,
+        status=TaskStatus.RUNNING,
+    )
+    db.add(task)
+    await db.commit()
 
-> 📌 完成后调 `Skill:verification-before-completion`
+    # 2) 流式调用 DeepSeek
+    stream = await client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"任务：{title}\n\n用户输入：{user_input}"},
+        ],
+        temperature=0.3,
+        max_tokens=4096,
+        stream=True,
+    )
+
+    full_output = ""
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            full_output += delta
+            yield {"type": "chunk", "content": delta}
+
+    # 3) 流结束，更新 Task 为 completed
+    task.output_data = full_output
+    task.status = TaskStatus.COMPLETED
+    task.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    # 4) 最后 yield 任务 ID，前端可据此跳转详情页
+    yield {"type": "done", "task_id": task.id}
+```
+
+#### Step 2: 修改 `backend/app/api/agents.py` — 新增 SSE 端点
+
+在 `run_agent` 下方新增流式端点：
+
+```python
+# backend/app/api/agents.py — 在 run_agent 下方新增
+
+from fastapi.responses import StreamingResponse
+import json
+
+@router.post("/{name}/run-stream")
+async def run_agent_stream_sse(
+    name: str,
+    data: TaskCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE 流式运行单个 Agent"""
+    agent = get_agent(name)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' 不存在")
+
+    async def event_stream():
+        async for event in run_agent_sse(
+            agent_name=name,
+            title=data.title,
+            user_input=data.input_data or data.title,
+            user_id=user.id,
+            db=db,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+```
+
+> 新增导入：`from fastapi.responses import StreamingResponse` 和 `import json`（放文件顶部）
+> 新增导入：`from app.services.agent_runner import run_agent_stream, run_agent_sse`
+
+#### Step 3: 不需要改旧端点
+
+旧的 `POST /api/agents/{name}/run` 保留不变。新增 `POST /api/agents/{name}/run-stream`，前端渐进切换。
+
+**前端要做的事**：
+
+#### Step 4: `frontend/src/lib/api.ts` — 新增流式调用方法
+
+```typescript
+// 在 agents 对象中新增 runStream 方法
+runStream: (
+  name: string,
+  data: { agent_name: string; title: string; input_data: string },
+  onChunk: (text: string) => void,
+  onDone: (taskId: string) => void,
+  onError: (err: Error) => void,
+): AbortController => {
+  const controller = new AbortController();
+  const t = getToken();
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/agents/${name}/run-stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new ApiError(await res.text(), res.status);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // 解析 SSE 帧（以 \n\n 分隔）
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || ""; // 保留不完整的最后一帧
+
+        for (const part of parts) {
+          const line = part.replace(/^data: /, "").trim();
+          if (!line) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === "chunk") {
+              onChunk(event.content);
+            } else if (event.type === "done") {
+              onDone(event.task_id);
+            }
+          } catch { /* 跳过解析失败的帧 */ }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        // 用户主动取消，不报错
+        return;
+      }
+      onError(err);
+    }
+  })();
+
+  return controller; // 调用方可以 controller.abort() 取消
+};
+```
+
+> 需要在文件顶部导入 `getToken`（已存在）。
+
+#### Step 5: `frontend/src/app/dashboard/agents/[name]/page.tsx` — 改用流式
+
+修改 `handleRun()` 函数，当前逻辑：
+
+```ts
+// 旧逻辑（替换掉）
+const task = await agentsApi.run(name, { ... });
+setResult(task);
+```
+
+改为流式消费：
+
+```ts
+const [streaming, setStreaming] = useState(false);
+const [streamText, setStreamText] = useState("");
+const controllerRef = useRef<AbortController | null>(null);
+
+async function handleRun() {
+  if (!title.trim()) { setError("请输入任务标题"); return; }
+  setError("");
+  setBusy(true);
+  setStreaming(true);
+  setStreamText("");
+  setResult(null);
+
+  const controller = agentsApi.runStream(
+    name,
+    { agent_name: name, title: title.trim(), input_data: inputData.trim() },
+    // onChunk
+    (text) => setStreamText((prev) => prev + text),
+    // onDone
+    (taskId) => {
+      setBusy(false);
+      setStreaming(false);
+      router.push(`/dashboard/tasks/${taskId}`);
+    },
+    // onError
+    (err) => {
+      setError(err.message || "运行失败");
+      setBusy(false);
+      setStreaming(false);
+    },
+  );
+  controllerRef.current = controller;
+}
+```
+
+在 JSX 的「分析结果」区域上方新增实时流式预览区：
+
+```tsx
+{/* 流式输出区（边跑边写） */}
+{streaming && (
+  <div className="card p-6 mb-8 animate-fade-up">
+    <div className="flex items-center gap-2 mb-4">
+      <div className="w-3 h-3 rounded-full bg-[#C9A94E] animate-pulse-gold" />
+      <span className="text-[#C9A94E] text-sm font-medium">AI 分析中...</span>
+      <button
+        onClick={() => controllerRef.current?.abort()}
+        className="ml-auto text-[#5A6577] text-xs hover:text-[#D95A4A] transition-colors"
+      >
+        停止生成
+      </button>
+    </div>
+    {streamText ? (
+      <div className="markdown-content">
+        <ReactMarkdown>{streamText}</ReactMarkdown>
+      </div>
+    ) : (
+      <div className="flex items-center gap-2 text-[#5A6577] text-sm">
+        <span className="w-4 h-4 border-2 border-[#5A6577]/30 border-t-[#C9A94E] rounded-full animate-spin" />
+        正在连接 AI...
+      </div>
+    )}
+  </div>
+)}
+```
+
+> 新增 import：`useRef`（从 react）
+> 按钮改文字：busy 时显示"AI 分析中..."而非原来的"AI 分析中..."
+
+**判定标准**：
+1. 进入任意 Agent 页面，输入标题，点「开始分析」
+2. 出现「AI 分析中...」卡片，**逐字/逐段实时输出 Markdown**
+3. 流式结束后自动跳转到任务详情页
+4. 点击「停止生成」能中止请求
+
+> 📌 前后端都改完后调 `Skill:verification-before-completion` 验证
 
 ---
 
