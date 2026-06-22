@@ -26,6 +26,15 @@ async function request<T>(
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
+  // 401/403 统一处理：清除 token，跳转登录页
+  if (res.status === 401 || res.status === 403) {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      window.location.replace("/login");
+    }
+    throw new ApiError("认证已过期，请重新登录", res.status);
+  }
+
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -71,6 +80,12 @@ export const agents = {
     request<Task>(`/api/agents/${name}/run`, {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  analyze: (title: string, inputData: string) =>
+    request<Task>("/api/agents/analyze", {
+      method: "POST",
+      body: JSON.stringify({ title, input_data: inputData }),
+      signal: AbortSignal.timeout(300_000), // 5 min
     }),
 };
 

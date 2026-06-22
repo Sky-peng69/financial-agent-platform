@@ -25,19 +25,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 恢复 session：从 token 解析用户信息
+    // 恢复 session：从 token 解析用户信息，校验过期时间
     const t = getToken();
     if (t) {
       try {
         const payload = JSON.parse(atob(t.split(".")[1]));
-        setUser({
-          id: payload.sub,
-          email: "",
-          name: "",
-          role: "",
-          organization_id: null,
-          is_active: true,
-        });
+        // token 已过期则清除，强制重新登录
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          clearToken();
+        } else {
+          setUser({
+            id: payload.sub,
+            email: "",
+            name: "",
+            role: "",
+            organization_id: null,
+            is_active: true,
+          });
+        }
       } catch {
         clearToken();
       }

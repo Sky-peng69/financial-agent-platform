@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -15,8 +15,8 @@ const CATEGORIES: Record<string, string> = {
   modeling: "建模工具",
 };
 
-export default function AgentRunPage({ params }: { params: Promise<{ name: string }> }) {
-  const { name } = use(params);
+export default function AgentRunPage({ params }: { params: { name: string } }) {
+  const { name } = params;
   const router = useRouter();
 
   const [agent, setAgent] = useState<Agent | null>(null);
