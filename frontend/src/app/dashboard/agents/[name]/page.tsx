@@ -15,6 +15,46 @@ const CATEGORIES: Record<string, string> = {
   modeling: "建模工具",
 };
 
+// 每个 Agent 专属的 placeholder 示例
+const AGENT_PLACEHOLDERS: Record<string, { title: string; description: string }> = {
+  "macro-economy-analyst": {
+    title: "例如：分析当前宏观经济形势及对A股的影响",
+    description:
+      "输入更多上下文：关注指标（PMI/CPI/M2）、政策方向（货币/财政）、时间范围...",
+  },
+  "industry-analyst": {
+    title: "例如：白酒行业竞争格局与关键趋势分析",
+    description:
+      "输入更多上下文：目标行业、关注维度（价值链/集中度/龙头对标）、政策影响...",
+  },
+  "fundamental-analyst": {
+    title: "例如：对茅台(600519)进行财务分析和估值",
+    description:
+      "输入更多上下文：目标公司、关注指标（ROE/毛利率/现金流）、估值方法偏好...",
+  },
+  "news-sentiment-analyst": {
+    title: "例如：近期降准政策对银行板块的影响评估",
+    description:
+      "输入更多上下文：关注事件类型（政策/财报/行业）、时间范围、情绪侧重...",
+  },
+  "wealth-advisor": {
+    title: "例如：35岁互联网从业者的资产配置方案",
+    description:
+      "输入更多上下文：年龄、收入、资产负债、风险偏好（保守/平衡/进取）、理财目标...",
+  },
+  "report-synthesizer": {
+    title: "例如：汇总各专家分析，生成贵州茅台综合投资报告",
+    description:
+      "输入更多上下文：涉及的标的、已完成的各项分析结果、报告侧重点...",
+  },
+};
+
+// 默认 placeholder
+const DEFAULT_PLACEHOLDER = {
+  title: "例如：描述你的分析需求...",
+  description: "输入更多上下文：分析对象、关注维度、期望输出格式...",
+};
+
 export default function AgentRunPage({ params }: { params: { name: string } }) {
   const { name } = params;
   const router = useRouter();
@@ -107,7 +147,9 @@ export default function AgentRunPage({ params }: { params: { name: string } }) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="例如：对茅台进行可比公司分析"
+            placeholder={
+              (AGENT_PLACEHOLDERS[name] || DEFAULT_PLACEHOLDER).title
+            }
           />
         </div>
 
@@ -117,7 +159,9 @@ export default function AgentRunPage({ params }: { params: { name: string } }) {
             className="input-field min-h-[120px]"
             value={inputData}
             onChange={(e) => setInputData(e.target.value)}
-            placeholder="输入更多上下文：客户信息、资产状况、行业偏好、风险偏好..."
+            placeholder={
+              (AGENT_PLACEHOLDERS[name] || DEFAULT_PLACEHOLDER).description
+            }
           />
         </div>
 
