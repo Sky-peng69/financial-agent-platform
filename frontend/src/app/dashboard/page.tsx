@@ -1,17 +1,43 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { agents as agentsApi, tasks as tasksApi, type Agent, type Task } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand("copy"); return true; }
+    catch { return false; }
+    finally { document.body.removeChild(ta); }
+  }
+}
+
 const SUGGESTED_PROMPTS = [
   "分析茅台(600519)的投资价值，涵盖行业竞争、财务表现和风险因素",
   "白酒行业竞争格局与关键趋势分析",
   "当前宏观经济形势研判及对A股市场影响",
 ];
+
+interface AgentProgress {
+  agent: string;
+  displayName: string;
+  title: string;
+  status: "pending" | "running" | "completed" | "timeout" | "error";
+}
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -25,7 +51,18 @@ export default function DashboardPage() {
   const [analyzeResult, setAnalyzeResult] = useState<Task | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
-  const [analyzePhase, setAnalyzePhase] = useState("");
+  const [analyzePhase, setAnalyzePhase] = useState("");  // planning | executing | synthesizing
+  const [phaseMessage, setPhaseMessage] = useState("");
+  const [agentProgress, setAgentProgress] = useState<AgentProgress[]>([]);
+  const [parsedPlan, setParsedPlan] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function handleCopy(text: string) {
+    copyToClipboard(text).then((ok) => {
+      if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    });
+  }
 
   useEffect(() => {
     if (!loading && !user) {
@@ -43,28 +80,75 @@ export default function DashboardPage() {
     }).catch(console.error).finally(() => setLoadingData(false));
   }, [user, loading, router]);
 
+  function resetAnalysis() {
+    abortRef.current?.abort();
+    setAnalyzeResult(null);
+    setAnalyzeError("");
+    setAnalyzePhase("");
+    setPhaseMessage("");
+    setAgentProgress([]);
+    setParsedPlan(null);
+  }
+
   async function handleAnalyze() {
     if (!analyzeInput.trim()) return;
-    setAnalyzeError("");
-    setAnalyzeResult(null);
+    resetAnalysis();
     setAnalyzeLoading(true);
-    setAnalyzePhase("planning");
 
-    const phaseTimer = setTimeout(() => setAnalyzePhase("executing"), 4000);
+    const agentStates: AgentProgress[] = [];
 
-    try {
-      const result = await agentsApi.analyze(analyzeInput.trim(), analyzeInput.trim());
-      clearTimeout(phaseTimer);
-      setAnalyzeResult(result);
-      setAnalyzePhase("");
-      tasksApi.list().then(setTasks).catch(() => {});
-    } catch (err: any) {
-      clearTimeout(phaseTimer);
-      setAnalyzeError(err.message || "分析失败，请重试");
-      setAnalyzePhase("");
-    } finally {
-      setAnalyzeLoading(false);
-    }
+    abortRef.current = agentsApi.analyzeStream(
+      analyzeInput.trim(),
+      analyzeInput.trim(),
+      {
+        onPhase: (phase, message) => {
+          setAnalyzePhase(phase);
+          setPhaseMessage(message);
+        },
+        onPlan: (plan) => {
+          setParsedPlan({ plan });
+        },
+        onAgentStart: (agent, displayName, agentTitle) => {
+          agentStates.push({ agent, displayName, title: agentTitle, status: "running" });
+          setAgentProgress([...agentStates]);
+        },
+        onAgentDone: (agent, _displayName, status) => {
+          const found = agentStates.find((a) => a.agent === agent);
+          if (found) {
+            found.status = status === "completed" ? "completed" : status === "timeout" ? "timeout" : "error";
+          }
+          setAgentProgress([...agentStates]);
+        },
+        onSynthesizing: () => {
+          // handled by onPhase("synthesizing", ...)
+        },
+        onDone: (result) => {
+          setAnalyzeLoading(false);
+          setAnalyzePhase("");
+          setAnalyzeResult({
+            id: result.task_id,
+            agent_name: "commander",
+            title: analyzeInput.trim(),
+            status: "completed",
+            input_data: JSON.stringify({ plan: result.plan, subtask_results: result.subtask_results }),
+            output_data: result.output_data,
+            error_message: null,
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+          // 设置 parsedPlan（如果还没设置）
+          if (!parsedPlan && result.plan) {
+            setParsedPlan({ plan: result.plan, subtask_results: result.subtask_results });
+          }
+          tasksApi.list().then(setTasks).catch(() => {});
+        },
+        onError: (err) => {
+          setAnalyzeLoading(false);
+          setAnalyzeError(err.message || "分析失败，请重试");
+          setAnalyzePhase("");
+        },
+      },
+    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -74,19 +158,16 @@ export default function DashboardPage() {
     }
   }
 
-  // Parse Commander plan from input_data JSON
-  const parsedPlan =
-    analyzeResult?.agent_name === "commander" && analyzeResult.input_data
-      ? (() => {
-          try { return JSON.parse(analyzeResult.input_data); }
-          catch { return null; }
-        })()
-      : null;
+  const phaseLabels: Record<string, string> = {
+    planning: "AI Commander 正在理解问题、规划分析任务...",
+    executing: "专家 Agent 正在并行分析中...",
+    synthesizing: "正在汇总各专家分析结果，生成综合报告...",
+  };
 
   if (loading || loadingData) {
     return (
       <div className="flex items-center justify-center h-full py-24">
-        <div className="w-7 h-7 border-2 border-[#C9A94E]/30 border-t-[#C9A94E] rounded-full animate-spin" />
+        <div className="w-7 h-7 border-2 border-[#2563EB]/20 border-t-[#2563EB] rounded-full animate-spin" />
       </div>
     );
   }
@@ -97,11 +178,11 @@ export default function DashboardPage() {
     <div className="max-w-5xl mx-auto px-6 py-8">
       {/* Header */}
       <div className="mb-10 animate-fade-up">
-        <p className="text-[#5A6577] text-xs mb-2 tracking-widest uppercase">Dashboard</p>
-        <h1 className="text-[#E8EDF5] text-2xl font-semibold">
+        <p className="text-[#9CA3AF] text-xs mb-2 tracking-widest uppercase">Dashboard</p>
+        <h1 className="text-[#111827] text-2xl font-semibold">
           {user?.name ? `${user.name}，下午好` : '欢迎回来'}
         </h1>
-        <p className="text-[#8B95A5] text-sm mt-1">
+        <p className="text-[#6B7280] text-sm mt-1">
           输入金融分析问题，AI Commander 自动调度专家 Agent 协作
         </p>
       </div>
@@ -109,17 +190,16 @@ export default function DashboardPage() {
       {/* ======== Commander 智能分析入口 ======== */}
       <section className="mb-12 animate-fade-up stagger-1">
         <div className="card relative overflow-hidden">
-          {/* Gold accent line at top — "activated" visual cue */}
-          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#C9A94E]/60 to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#2563EB]" />
 
           <div className="p-6 sm:p-8">
             {/* Section label with pulse indicator */}
             <div className="flex items-center gap-2.5 mb-5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C9A94E] opacity-60" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#C9A94E]" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2563EB] opacity-40" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2563EB]" />
               </span>
-              <h2 className="text-[#8B95A5] text-xs font-semibold tracking-widest uppercase">
+              <h2 className="text-[#6B7280] text-xs font-semibold tracking-widest uppercase">
                 Commander 智能分析
               </h2>
             </div>
@@ -142,26 +222,23 @@ export default function DashboardPage() {
               >
                 {analyzeLoading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-[#080C14]/30 border-t-[#080C14] rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     分析中...
                   </>
                 ) : (
-                  <>
-                    <span className="text-base">◆</span>
-                    智能分析
-                  </>
+                  "智能分析"
                 )}
               </button>
             </div>
 
-            {/* Suggested prompts — only show in idle state */}
+            {/* Suggested prompts */}
             {!analyzeResult && !analyzeLoading && !analyzeError && (
               <div className="flex flex-wrap gap-2 mt-4">
-                <span className="text-[10px] text-[#5A6577] self-center mr-1">试试：</span>
+                <span className="text-[11px] text-[#9CA3AF] self-center mr-1">试试：</span>
                 {SUGGESTED_PROMPTS.map((hint) => (
                   <button
                     key={hint}
-                    className="text-xs text-[#5A6577] bg-[#0A0F18] border border-[#1E2A3E] px-3 py-1.5 rounded-sm hover:text-[#C9A94E] hover:border-[#C9A94E]/30 transition-all duration-200"
+                    className="text-xs text-[#6B7280] bg-[#F1F3F5] border border-[#E5E7EB] px-3 py-1.5 rounded-lg hover:text-[#2563EB] hover:border-[#2563EB]/30 hover:bg-[#EFF6FF] transition-all duration-200"
                     onClick={() => setAnalyzeInput(hint)}
                   >
                     {hint.length > 24 ? hint.slice(0, 24) + "..." : hint}
@@ -170,37 +247,98 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* ---- Loading state ---- */}
+            {/* ---- Loading state with real-time agent progress ---- */}
             {analyzeLoading && (
-              <div className="mt-6 border-t border-[#1E2A3E] pt-6 animate-fade-in">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-5 h-5 border-2 border-[#C9A94E]/30 border-t-[#C9A94E] rounded-full animate-spin" />
-                  <span className="text-sm text-[#8B95A5]">
-                    {analyzePhase === "planning" && "AI Commander 正在理解问题、规划分析任务..."}
-                    {analyzePhase === "executing" && "专家 Agent 正在并行分析中，预计需 1-2 分钟..."}
-                    {!analyzePhase && "正在处理..."}
+              <div className="mt-6 border-t border-[#E5E7EB] pt-6 animate-fade-in">
+                {/* Phase indicator */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-5 h-5 border-2 border-[#2563EB]/20 border-t-[#2563EB] rounded-full animate-spin" />
+                  <span className="text-sm text-[#6B7280]">
+                    {phaseMessage || phaseLabels[analyzePhase] || "正在处理..."}
                   </span>
                 </div>
-                {/* Skeleton blocks */}
-                <div className="space-y-2.5">
-                  <div className="h-3 bg-[#1E2A3E] rounded-sm animate-pulse w-full" />
-                  <div className="h-3 bg-[#1E2A3E] rounded-sm animate-pulse w-3/4" />
-                  <div className="h-3 bg-[#1E2A3E] rounded-sm animate-pulse w-5/6" />
-                  <div className="h-3 bg-[#1E2A3E] rounded-sm animate-pulse w-1/2" />
-                </div>
+
+                {/* Agent progress cards */}
+                {agentProgress.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <p className="text-[11px] text-[#9CA3AF] uppercase tracking-wider font-medium">
+                      专家执行进度
+                    </p>
+                    {agentProgress.map((ap) => (
+                      <div
+                        key={ap.agent}
+                        className="flex items-center justify-between bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-4 py-3 transition-all duration-300"
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Status dot */}
+                          {ap.status === "running" ? (
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2563EB] opacity-40" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#2563EB]" />
+                            </span>
+                          ) : ap.status === "completed" ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#059669]" />
+                          ) : ap.status === "timeout" ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626]" />
+                          )}
+                          <div>
+                            <span className="text-[#111827] text-sm font-medium">
+                              {ap.displayName}
+                            </span>
+                            {ap.title && (
+                              <span className="text-[#9CA3AF] text-xs ml-2">
+                                — {ap.title}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            ap.status === "running"
+                              ? "bg-[#EFF6FF] text-[#2563EB]"
+                              : ap.status === "completed"
+                              ? "bg-[#ECFDF5] text-[#059669]"
+                              : ap.status === "timeout"
+                              ? "bg-[#FFFBEB] text-[#F59E0B]"
+                              : "bg-[#FEF2F2] text-[#DC2626]"
+                          }`}
+                        >
+                          {ap.status === "running"
+                            ? "分析中"
+                            : ap.status === "completed"
+                            ? "✓ 完成"
+                            : ap.status === "timeout"
+                            ? "超时"
+                            : "失败"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Skeleton while no agents started yet */}
+                {agentProgress.length === 0 && (
+                  <div className="space-y-2.5">
+                    <div className="h-3 bg-[#F1F3F5] rounded-lg animate-pulse w-full" />
+                    <div className="h-3 bg-[#F1F3F5] rounded-lg animate-pulse w-3/4" />
+                    <div className="h-3 bg-[#F1F3F5] rounded-lg animate-pulse w-5/6" />
+                  </div>
+                )}
               </div>
             )}
 
             {/* ---- Error state ---- */}
             {analyzeError && (
-              <div className="mt-6 bg-[#3D1A1A] border border-[#D95A4A]/30 rounded-sm px-5 py-4 animate-fade-in">
+              <div className="mt-6 bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg px-5 py-4 animate-fade-in">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-[#D95A4A] text-sm font-semibold mb-1">分析未能完成</p>
-                    <p className="text-[#D95A4A]/70 text-sm">{analyzeError}</p>
+                    <p className="text-[#DC2626] text-sm font-semibold mb-1">分析未能完成</p>
+                    <p className="text-[#DC2626]/70 text-sm">{analyzeError}</p>
                   </div>
                   <button
-                    className="text-[#C9A94E] text-sm hover:text-[#D4B85A] transition-colors shrink-0 mt-0.5"
+                    className="text-[#2563EB] text-sm hover:text-[#1D4ED8] transition-colors shrink-0 mt-0.5 font-medium"
                     onClick={handleAnalyze}
                   >
                     重试
@@ -211,28 +349,28 @@ export default function DashboardPage() {
 
             {/* ---- Result area ---- */}
             {analyzeResult && (
-              <div className="mt-6 border-t border-[#1E2A3E] pt-6 animate-fade-up">
+              <div className="mt-6 border-t border-[#E5E7EB] pt-6 animate-fade-up">
                 {/* Status */}
                 <div className="flex items-center gap-2 mb-5">
                   <span
-                    className={`text-xs px-2.5 py-1 rounded-sm font-medium ${
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                       analyzeResult.status === "completed"
-                        ? "bg-[#1A3D2A] text-[#34A584]"
-                        : "bg-[#3D1A1A] text-[#D95A4A]"
+                        ? "bg-[#ECFDF5] text-[#059669]"
+                        : "bg-[#FEF2F2] text-[#DC2626]"
                     }`}
                   >
                     {analyzeResult.status === "completed" ? "✓ 分析完成" : "✗ 失败"}
                   </span>
                   {analyzeResult.error_message && (
-                    <span className="text-xs text-[#D95A4A]">{analyzeResult.error_message}</span>
+                    <span className="text-xs text-[#DC2626]">{analyzeResult.error_message}</span>
                   )}
                 </div>
 
                 {/* Plan visualization */}
                 {parsedPlan?.plan && (
                   <div className="mb-6">
-                    <h3 className="text-[#E8EDF5] text-sm font-semibold mb-3 flex items-center gap-2">
-                      <span className="text-[#C9A94E] text-xs">◇</span>
+                    <h3 className="text-[#111827] text-sm font-semibold mb-3 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
                       编排计划
                     </h3>
                     <div className="flex flex-wrap gap-2">
@@ -243,12 +381,12 @@ export default function DashboardPage() {
                           return (
                             <div
                               key={i}
-                              className="flex items-center gap-2 bg-[#0A0F18] border border-[#1E2A3E] rounded-sm px-3 py-2"
+                              className="flex items-center gap-2 bg-[#F1F3F5] border border-[#E5E7EB] rounded-lg px-3 py-2"
                             >
-                              <span className="text-[10px] text-[#C9A94E] font-mono tabular-nums">
+                              <span className="text-[11px] text-[#2563EB] font-mono tabular-nums font-medium">
                                 {String(i + 1).padStart(2, "0")}
                               </span>
-                              <span className="text-[#B9C2D4] text-xs">{name}</span>
+                              <span className="text-[#374151] text-xs">{name}</span>
                             </div>
                           );
                         }
@@ -260,32 +398,32 @@ export default function DashboardPage() {
                 {/* Sub-task results (collapsible per specialist) */}
                 {parsedPlan?.subtask_results?.length > 0 && (
                   <div className="mb-6 space-y-2">
-                    <h3 className="text-[#E8EDF5] text-sm font-semibold mb-3 flex items-center gap-2">
-                      <span className="text-[#C9A94E] text-xs">◇</span>
+                    <h3 className="text-[#111827] text-sm font-semibold mb-3 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
                       专家分析详情
                     </h3>
                     {parsedPlan.subtask_results.map((r: any, i: number) => (
-                      <details key={i} className="group bg-[#0A0F18] border border-[#1E2A3E] rounded-sm">
-                        <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none hover:bg-[#141C2B] transition-colors list-none">
+                      <details key={i} className="group bg-[#F1F3F5] border border-[#E5E7EB] rounded-lg">
+                        <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none hover:bg-[#E5E7EB] transition-colors list-none">
                           <div className="flex items-center gap-3">
                             <span
                               className={`w-2 h-2 rounded-full ${
                                 r.status === "completed"
-                                  ? "bg-[#34A584]"
+                                  ? "bg-[#059669]"
                                   : r.status === "timeout"
-                                  ? "bg-[#D95A4A]"
+                                  ? "bg-[#DC2626]"
                                   : r.status === "error"
-                                  ? "bg-[#D95A4A]"
-                                  : "bg-[#5A6577]"
+                                  ? "bg-[#DC2626]"
+                                  : "bg-[#9CA3AF]"
                               }`}
                             />
-                            <span className="text-[#E8EDF5] text-sm font-medium">{r.agent}</span>
-                            <span className="text-[#5A6577] text-[10px]">{r.status}</span>
+                            <span className="text-[#111827] text-sm font-medium">{r.agent}</span>
+                            <span className="text-[#9CA3AF] text-[11px]">{r.status}</span>
                           </div>
-                          <span className="text-[#5A6577] text-xs group-open:hidden">展开</span>
-                          <span className="text-[#5A6577] text-xs hidden group-open:inline">收起</span>
+                          <span className="text-[#9CA3AF] text-xs group-open:hidden">展开</span>
+                          <span className="text-[#9CA3AF] text-xs hidden group-open:inline">收起</span>
                         </summary>
-                        <div className="px-4 pb-4 border-t border-[#1E2A3E] pt-4 markdown-content">
+                        <div className="px-4 pb-4 border-t border-[#E5E7EB] pt-4 markdown-content">
                           <ReactMarkdown>{r.content || "（无内容）"}</ReactMarkdown>
                         </div>
                       </details>
@@ -295,13 +433,38 @@ export default function DashboardPage() {
 
                 {/* Synthesis report */}
                 {analyzeResult.output_data && (
-                  <div className="bg-[#0A0F18] border border-[#1E2A3E] rounded-sm p-5">
-                    <h3 className="text-[#E8EDF5] text-sm font-semibold mb-4 flex items-center gap-2">
-                      <span className="text-[#C9A94E] text-xs">◆</span>
+                  <div className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg p-5">
+                    <h3 className="text-[#111827] text-sm font-semibold mb-4 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
                       综合报告
                     </h3>
                     <div className="markdown-content">
                       <ReactMarkdown>{analyzeResult.output_data}</ReactMarkdown>
+                    </div>
+                    <div className="flex items-center gap-2 mt-5 pt-4 border-t border-[#E5E7EB]">
+                      <button
+                        onClick={() => handleCopy(analyzeResult.output_data || "")}
+                        className="flex items-center gap-1.5 text-xs text-[#6B7280] hover:text-[#2563EB] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#F1F3F5]"
+                      >
+                        {copied ? (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            已复制
+                          </>
+                        ) : (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            复制报告
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleAnalyze}
+                        className="flex items-center gap-1.5 text-xs text-[#6B7280] hover:text-[#2563EB] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#F1F3F5]"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        重新生成
+                      </button>
                     </div>
                   </div>
                 )}
@@ -310,15 +473,16 @@ export default function DashboardPage() {
                 <div className="mt-4 flex items-center gap-4">
                   <Link
                     href={`/dashboard/tasks/${analyzeResult.id}`}
-                    className="text-[#C9A94E] text-xs hover:text-[#D4B85A] transition-colors"
+                    className="text-[#2563EB] text-xs hover:text-[#1D4ED8] transition-colors font-medium"
                   >
                     查看任务详情 →
                   </Link>
                   <button
-                    className="text-[#5A6577] text-xs hover:text-[#8B95A5] transition-colors"
+                    className="text-[#9CA3AF] text-xs hover:text-[#6B7280] transition-colors"
                     onClick={() => {
                       setAnalyzeResult(null);
                       setAnalyzeInput("");
+                      setParsedPlan(null);
                     }}
                   >
                     新建分析
@@ -333,8 +497,8 @@ export default function DashboardPage() {
       {/* Agent 快捷入口 */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[#E8EDF5] text-sm font-semibold tracking-wider uppercase">可用 Agent</h2>
-          <Link href="/dashboard/agents" className="text-[#C9A94E] text-xs hover:text-[#D4B85A] transition-colors">
+          <h2 className="text-[#111827] text-sm font-semibold tracking-wider uppercase">可用 Agent</h2>
+          <Link href="/dashboard/agents" className="text-[#2563EB] text-xs hover:text-[#1D4ED8] transition-colors font-medium">
             查看全部 →
           </Link>
         </div>
@@ -347,17 +511,17 @@ export default function DashboardPage() {
               className={`card-hover p-5 block animate-fade-up stagger-${i + 1}`}
             >
               <div className="flex items-start justify-between mb-3">
-                <h3 className="text-[#E8EDF5] font-semibold text-sm">{agent.display_name}</h3>
-                <span className="text-[#5A6577] text-xs px-2 py-0.5 rounded border border-[#1E2A3E]">
+                <h3 className="text-[#111827] font-semibold text-sm">{agent.display_name}</h3>
+                <span className="text-[#6B7280] text-xs px-2 py-0.5 rounded-full bg-[#F1F3F5]">
                   {agent.category}
                 </span>
               </div>
-              <p className="text-[#8B95A5] text-xs leading-relaxed mb-3 line-clamp-2">
+              <p className="text-[#6B7280] text-xs leading-relaxed mb-3 line-clamp-2">
                 {agent.description}
               </p>
               <div className="flex items-center gap-1.5">
                 {agent.tools.map((t) => (
-                  <span key={t} className="text-[#5A6577] text-[10px] px-1.5 py-0.5 rounded bg-[#0A0F18] border border-[#1E2A3E]">
+                  <span key={t} className="text-[#6B7280] text-[10px] px-1.5 py-0.5 rounded-full bg-[#F1F3F5]">
                     {t}
                   </span>
                 ))}
@@ -370,15 +534,15 @@ export default function DashboardPage() {
       {/* 最近任务 */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[#E8EDF5] text-sm font-semibold tracking-wider uppercase">最近任务</h2>
-          <Link href="/dashboard/tasks" className="text-[#C9A94E] text-xs hover:text-[#D4B85A] transition-colors">
+          <h2 className="text-[#111827] text-sm font-semibold tracking-wider uppercase">最近任务</h2>
+          <Link href="/dashboard/tasks" className="text-[#2563EB] text-xs hover:text-[#1D4ED8] transition-colors font-medium">
             查看全部 →
           </Link>
         </div>
 
         {recentTasks.length === 0 ? (
           <div className="card p-8 text-center">
-            <p className="text-[#5A6577] text-sm">还没有任务，去 Agent 市场运行第一个分析吧</p>
+            <p className="text-[#9CA3AF] text-sm">还没有任务，去 Agent 市场运行第一个分析吧</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -389,20 +553,20 @@ export default function DashboardPage() {
                 className="card-hover flex items-center justify-between px-5 py-3.5 block"
               >
                 <div>
-                  <h4 className="text-[#E8EDF5] text-sm font-medium">{task.title}</h4>
-                  <span className="text-[#5A6577] text-xs">{task.agent_name}</span>
+                  <h4 className="text-[#111827] text-sm font-medium">{task.title}</h4>
+                  <span className="text-[#9CA3AF] text-xs">{task.agent_name}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[#5A6577] text-xs">
+                  <span className="text-[#9CA3AF] text-xs">
                     {new Date(task.created_at).toLocaleDateString("zh-CN")}
                   </span>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-sm ${
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                       task.status === "completed"
-                        ? "bg-[#1A3D2A] text-[#34A584]"
+                        ? "bg-[#ECFDF5] text-[#059669]"
                         : task.status === "failed"
-                        ? "bg-[#3D1A1A] text-[#D95A4A]"
-                        : "bg-[#1E2A3E] text-[#8B95A5]"
+                        ? "bg-[#FEF2F2] text-[#DC2626]"
+                        : "bg-[#F1F3F5] text-[#6B7280]"
                     }`}
                   >
                     {task.status === "completed" ? "完成" : task.status === "failed" ? "失败" : task.status}

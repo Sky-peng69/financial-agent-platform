@@ -8,11 +8,12 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import (
+    AGENTS_BY_NAME,
     build_commander_system_prompt,
     get_specialist_prompt,
 )
@@ -20,6 +21,25 @@ from app.models import Task, TaskStatus
 from app.services.llm import chat
 
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
+
+
+async def _commit_with_retry(db: AsyncSession, max_retries: int = 3) -> None:
+    """提交数据库事务，带指数退避重试"""
+    for attempt in range(max_retries):
+        try:
+            await db.commit()
+            return
+        except Exception:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+            else:
+                raise
+
+
+def _agent_display_name(agent_name: str) -> str:
+    """获取 Agent 的中文显示名"""
+    info = AGENTS_BY_NAME.get(agent_name)
+    return info.display_name if info else agent_name
 
 
 # ============================================================
@@ -91,8 +111,23 @@ async def run_specialist(agent_name: str, prompt: str) -> dict[str, Any]:
     }
 
 
+async def _run_with_timeout(agent_name: str, prompt: str):
+    """运行 Specialist，带超时保护"""
+    try:
+        return await asyncio.wait_for(
+            run_specialist(agent_name, prompt),
+            timeout=SPECIALIST_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        return {
+            "agent": agent_name,
+            "status": "timeout",
+            "content": f"分析超时（>{SPECIALIST_TIMEOUT}秒）",
+        }
+
+
 # ============================================================
-# 3. 主流程：编排执行
+# 3. 主流程：编排执行（同步版）
 # ============================================================
 
 async def run_orchestrated_analysis(
@@ -115,23 +150,9 @@ async def run_orchestrated_analysis(
         (t for t in subtasks if t["agent"] == "report-synthesizer"), None
     )
 
-    # 并行执行 Specialist，带超时保护
-    async def run_with_timeout(agent_name: str, prompt: str):
-        try:
-            return await asyncio.wait_for(
-                run_specialist(agent_name, prompt),
-                timeout=SPECIALIST_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            return {
-                "agent": agent_name,
-                "status": "timeout",
-                "content": f"分析超时（>{SPECIALIST_TIMEOUT}秒）",
-            }
-
     specialist_results = await asyncio.gather(
         *[
-            run_with_timeout(t["agent"], t["prompt"])
+            _run_with_timeout(t["agent"], t["prompt"])
             for t in execution_tasks
         ],
         return_exceptions=True,
@@ -195,3 +216,184 @@ async def run_orchestrated_analysis(
     await db.commit()
 
     return task
+
+
+# ============================================================
+# 4. 主流程：编排执行（SSE 流式进度版）
+# ============================================================
+
+async def run_orchestrated_analysis_sse(
+    user_input: str,
+    title: str,
+    user_id: str,
+    db: AsyncSession,
+) -> AsyncGenerator[dict, None]:
+    """
+    SSE 流式版百炼编排：实时推送进度事件。
+    前端可以实时看到 Commander 规划 → 各 Specialist 启动/完成 → 汇总 → 完成。
+
+    事件类型：
+      phase        — 阶段变更 {phase, message}
+      agent_start  — Agent 开始执行 {agent, display_name, title}
+      agent_done   — Agent 执行完成 {agent, display_name, status}
+      done         — 全部完成 {task_id, output_data, plan, subtask_results}
+      error        — 出错 {message}
+    """
+    task_id = str(uuid.uuid4())
+
+    try:
+        # ═══ Phase 1: Commander 规划 ═══
+        yield {
+            "type": "phase",
+            "phase": "planning",
+            "message": "AI Commander 正在理解问题、规划分析任务...",
+        }
+
+        plan = await plan_analysis(user_input)
+        subtasks = plan.get("subtasks", [])
+
+        execution_tasks = [
+            t for t in subtasks if t["agent"] != "report-synthesizer"
+        ]
+        synthesize_task = next(
+            (t for t in subtasks if t["agent"] == "report-synthesizer"), None
+        )
+
+        # 构建执行阶段消息
+        agent_names = [
+            _agent_display_name(t["agent"]) for t in execution_tasks
+        ]
+        if synthesize_task:
+            agent_names.append(_agent_display_name("report-synthesizer"))
+        agents_str = "、".join(agent_names) if agent_names else "专家"
+
+        yield {
+            "type": "phase",
+            "phase": "executing",
+            "message": f"任务拆解完成，启动 {len(execution_tasks)} 个专家并行分析：{agents_str}",
+            "plan": plan,  # 前端可直接渲染编排计划
+        }
+
+        # ═══ Phase 2: 并行执行 Specialist ═══
+        # 先发送所有 agent_start 事件
+        for t in execution_tasks:
+            yield {
+                "type": "agent_start",
+                "agent": t["agent"],
+                "display_name": _agent_display_name(t["agent"]),
+                "title": t.get("title", ""),
+            }
+
+        # 用 as_completed 逐个等待完成，每完成一个就发送 agent_done
+        agent_display_map = {
+            t["agent"]: _agent_display_name(t["agent"])
+            for t in execution_tasks
+        }
+
+        coros = [
+            _run_with_timeout(t["agent"], t["prompt"])
+            for t in execution_tasks
+        ]
+
+        results: list[dict] = []
+        if coros:
+            for coro in asyncio.as_completed(coros):
+                result = await coro
+                agent_name = result.get("agent", "unknown")
+                yield {
+                    "type": "agent_done",
+                    "agent": agent_name,
+                    "display_name": agent_display_map.get(agent_name, agent_name),
+                    "status": result.get("status", "unknown"),
+                }
+                results.append(result)
+
+        # ═══ Phase 3: 汇总合成 ═══
+        synthesis_instruction = plan.get("synthesis_instruction", "")
+
+        if len(results) == 0 and not synthesize_task:
+            final_output = "未能获取任何分析结果，请重试。"
+        elif len(results) == 0 and synthesize_task:
+            # 所有 subtask 都是 report-synthesizer，直接运行它
+            final_result = await run_specialist(
+                "report-synthesizer",
+                synthesize_task["prompt"],
+            )
+            final_output = final_result["content"]
+        elif len(results) == 1 and not synthesize_task:
+            final_output = results[0]["content"]
+        else:
+            yield {
+                "type": "phase",
+                "phase": "synthesizing",
+                "message": "正在汇总各专家分析结果，生成综合报告...",
+            }
+
+            reports_text = "\n\n---\n\n".join(
+                f"【{r['agent']}】分析报告：\n{r['content']}" for r in results
+            )
+            synthesize_prompt = (
+                synthesize_task["prompt"] if synthesize_task else user_input
+            )
+            final_prompt = f"""汇总指令：{synthesis_instruction}
+
+原始用户请求：{user_input}
+
+以下各专家的分析结果：
+
+{reports_text}
+
+请按标准报告格式生成综合报告。"""
+
+            final_result = await run_specialist("report-synthesizer", final_prompt)
+            final_output = final_result["content"]
+
+        # ═══ Phase 4: 保存到数据库 ═══
+        task = Task(
+            id=task_id,
+            user_id=user_id,
+            agent_name="commander",
+            title=title,
+            input_data=json.dumps({
+                "user_input": user_input,
+                "plan": plan,
+                "subtask_results": results,
+            }, ensure_ascii=False),
+            output_data=final_output,
+            status=TaskStatus.COMPLETED,
+            completed_at=datetime.now(timezone.utc),
+        )
+        db.add(task)
+        await _commit_with_retry(db)
+
+        yield {
+            "type": "done",
+            "task_id": task.id,
+            "output_data": final_output,
+            "plan": plan,
+            "subtask_results": results,
+        }
+
+    except Exception as e:
+        # 异常：保存 failed Task，yield error
+        try:
+            task = Task(
+                id=task_id,
+                user_id=user_id,
+                agent_name="commander",
+                title=title,
+                input_data=user_input,
+                status=TaskStatus.FAILED,
+                error_message=str(e),
+                completed_at=datetime.now(timezone.utc),
+            )
+            db.add(task)
+            await _commit_with_retry(db)
+        except Exception:
+            pass
+
+        yield {
+            "type": "error",
+            "message": str(e),
+            "task_id": task_id,
+        }
