@@ -17,7 +17,7 @@ from app.agents.registry import (
     get_specialist_prompt,
 )
 from app.models import Task, TaskStatus
-from app.services.llm import get_client
+from app.services.llm import chat
 
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
 
@@ -28,20 +28,13 @@ SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
 
 async def plan_analysis(user_input: str) -> dict[str, Any]:
     """Commander 分析用户请求，输出执行计划"""
-    client = get_client()
     system_prompt = build_commander_system_prompt()
 
-    response = await client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"请为以下用户请求规划分析计划：\n\n{user_input}"},
-        ],
-        temperature=0.2,
-        max_tokens=2048,
+    content = await chat(
+        messages=[{"role": "user", "content": f"请为以下用户请求规划分析计划：\n\n{user_input}"}],
+        system_prompt=system_prompt,
+        enable_search=False,
     )
-
-    content = response.choices[0].message.content or "{}"
 
     # 提取 JSON（可能被 markdown 代码块包裹）
     json_str = content
@@ -76,8 +69,7 @@ async def plan_analysis(user_input: str) -> dict[str, Any]:
 # ============================================================
 
 async def run_specialist(agent_name: str, prompt: str) -> dict[str, Any]:
-    """运行单个 Specialist Agent，返回结构化结果"""
-    client = get_client()
+    """运行单个 Specialist Agent，返回结构化结果（DeepSeek 自动联网搜索）"""
     system_prompt = get_specialist_prompt(agent_name)
 
     if not system_prompt:
@@ -87,20 +79,15 @@ async def run_specialist(agent_name: str, prompt: str) -> dict[str, Any]:
             "content": f"Agent '{agent_name}' 未配置",
         }
 
-    response = await client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.3,
-        max_tokens=4096,
+    result = await chat(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt=system_prompt,
     )
 
     return {
         "agent": agent_name,
         "status": "completed",
-        "content": response.choices[0].message.content or "",
+        "content": result,
     }
 
 

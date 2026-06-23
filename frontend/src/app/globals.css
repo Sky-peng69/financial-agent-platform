@@ -2,22 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #080C14;
-  --bg-card: #0F1521;
-  --bg-card-hover: #141C2B;
-  --border: #1E2A3E;
-  --text-primary: #E8EDF5;
-  --text-secondary: #8B95A5;
-  --text-muted: #5A6577;
-  --accent-gold: #C9A94E;
-  --accent-gold-dim: #8B7230;
-  --accent-blue: #4A90D9;
-  --accent-green: #34A584;
-  --accent-red: #D95A4A;
-  --surface-elevated: #141C2B;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8F9FB;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F8F9FB;
+  --bg-subtle: #F1F3F5;
+  --bg-sidebar: #F8F9F9;
+  --border-primary: #E5E7EB;
+  --border-hover: #D1D5DB;
+  --border-subtle: #F3F4F6;
+  --text-primary: #111827;
+  --text-body: #374151;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --text-inverse: #FFFFFF;
+  --accent-primary: #2563EB;
+  --accent-primary-hover: #1D4ED8;
+  --accent-primary-active: #1E40AF;
+  --accent-primary-subtle: #EFF6FF;
+  --accent-primary-dim: #93C5FD;
+  --accent-green: #059669;
+  --accent-green-bg: #ECFDF5;
+  --accent-red: #DC2626;
+  --accent-red-bg: #FEF2F2;
 }
 
 * {
@@ -31,59 +41,60 @@ html, body {
 }
 
 body {
-  font-family: 'Noto Sans SC', 'JetBrains Mono', monospace;
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-primary);
-  background-image:
-    radial-gradient(ellipse at 20% 50%, rgba(201, 169, 78, 0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(74, 144, 217, 0.03) 0%, transparent 50%);
-  background-attachment: fixed;
-}
-
-/* Subtle grid overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(30, 42, 62, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 42, 62, 0.15) 1px, transparent 1px);
-  background-size: 64px 64px;
-  pointer-events: none;
-  z-index: 0;
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer components {
   .card {
-    @apply bg-[#0F1521] border border-[#1E2A3E] rounded-sm;
+    @apply bg-white border border-[#E5E7EB] rounded-xl shadow-sm;
   }
 
   .card-hover {
-    @apply card transition-all duration-300;
+    @apply card transition-all duration-200;
   }
   .card-hover:hover {
-    @apply bg-[#141C2B] border-[#2A3A52] -translate-y-0.5;
+    @apply border-[#D1D5DB] shadow-md;
+    transform: translateY(-1px);
   }
 
   .btn-primary {
-    @apply bg-[#C9A94E] text-[#080C14] font-semibold px-6 py-2.5 rounded-sm
-           hover:bg-[#D4B85A] active:bg-[#B8942E] transition-all duration-200
-           disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply bg-[#2563EB] text-white font-medium px-5 py-2.5 rounded-lg
+           hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-sm;
   }
 
   .btn-secondary {
-    @apply border border-[#1E2A3E] text-[#B9C2D4] px-6 py-2.5 rounded-sm
-           hover:bg-[#141C2B] hover:border-[#2A3A52] transition-all duration-200;
+    @apply bg-white border border-[#E5E7EB] text-[#374151] font-medium px-5 py-2.5 rounded-lg
+           hover:bg-[#F8F9FB] hover:border-[#D1D5DB] transition-all duration-200;
   }
 
   .input-field {
-    @apply w-full bg-[#0A0F18] border border-[#1E2A3E] text-[#E8EDF5]
-           placeholder:text-[#5A6577] px-4 py-2.5 rounded-sm
-           focus:outline-none focus:border-[#C9A94E] focus:ring-1 focus:ring-[#C9A94E]/30
+    @apply w-full bg-white border border-[#E5E7EB] text-[#111827]
+           placeholder:text-[#9CA3AF] px-4 py-2.5 rounded-lg text-sm
+           focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/15
            transition-all duration-200;
   }
 
   .label {
-    @apply text-[#8B95A5] text-sm font-medium mb-1.5 block;
+    @apply text-[#374151] text-sm font-medium mb-1.5 block;
+  }
+
+  .badge-success {
+    @apply bg-[#ECFDF5] text-[#059669] text-xs font-medium px-2.5 py-1 rounded-full;
+  }
+  .badge-error {
+    @apply bg-[#FEF2F2] text-[#DC2626] text-xs font-medium px-2.5 py-1 rounded-full;
+  }
+  .badge-info {
+    @apply bg-[#EFF6FF] text-[#2563EB] text-xs font-medium px-2.5 py-1 rounded-full;
+  }
+  .badge-neutral {
+    @apply bg-[#F1F3F5] text-[#6B7280] text-xs font-medium px-2.5 py-1 rounded-full;
   }
 }
 
@@ -95,49 +106,78 @@ body::before {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1E2A3E;
-  border-radius: 3px;
+  background: #D1D5DB;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2A3A52;
+  background: #9CA3AF;
 }
 
-/* Markdown content in agent output */
+/* Markdown content */
 .markdown-content h1 {
-  @apply text-[#E8EDF5] text-xl font-bold mt-6 mb-3 pb-2 border-b border-[#1E2A3E];
+  @apply text-[#111827] text-xl font-bold mt-6 mb-3 pb-2 border-b border-[#E5E7EB];
 }
 .markdown-content h2 {
-  @apply text-[#E8EDF5] text-lg font-semibold mt-5 mb-2;
+  @apply text-[#111827] text-lg font-semibold mt-5 mb-2;
 }
 .markdown-content h3 {
-  @apply text-[#E8EDF5] text-base font-semibold mt-4 mb-1.5;
+  @apply text-[#111827] text-base font-semibold mt-4 mb-1.5;
 }
 .markdown-content p {
-  @apply text-[#B9C2D4] leading-relaxed mb-3;
+  @apply text-[#374151] leading-relaxed mb-3;
 }
 .markdown-content ul, .markdown-content ol {
-  @apply text-[#B9C2D4] mb-3 pl-5;
+  @apply text-[#374151] mb-3 pl-5;
 }
 .markdown-content li {
   @apply mb-1;
 }
+/* Markdown 表格容器（支持横向滚动） */
+.markdown-content .table-wrapper {
+  @apply w-full my-5;
+  overflow-x: auto;
+  display: block;
+}
 .markdown-content table {
-  @apply w-full border-collapse my-4 text-sm;
+  @apply border-collapse text-sm my-5;
+  display: table;
+  min-width: 100%;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.markdown-content thead {
+  @apply border-b-2 border-[#2563EB]/20;
 }
 .markdown-content th {
-  @apply bg-[#0F1521] border border-[#1E2A3E] px-3 py-2 text-left text-[#C9A94E] font-semibold;
+  @apply bg-[#F1F5F9] border-b border-[#E5E7EB] px-4 py-3 text-left text-[#1E40AF] text-xs font-semibold tracking-wide uppercase whitespace-nowrap;
 }
 .markdown-content td {
-  @apply border border-[#1E2A3E] px-3 py-2 text-[#B9C2D4] font-mono;
+  @apply border-b border-[#F3F4F6] px-4 py-2.5 text-[#374151] text-sm leading-relaxed;
+  font-variant-numeric: tabular-nums;
+}
+.markdown-content tbody tr:nth-child(even) td {
+  @apply bg-[#F8FAFC];
+}
+.markdown-content tbody tr:hover td {
+  @apply bg-[#EFF6FF];
+}
+.markdown-content td:first-child {
+  @apply font-medium text-[#111827] whitespace-nowrap;
+}
+.markdown-content table + p > em,
+.markdown-content table + blockquote,
+.markdown-content blockquote:has(> p > em) {
+  @apply text-xs text-[#9CA3AF] mt-1 mb-4 italic;
 }
 .markdown-content strong {
-  @apply text-[#E8EDF5] font-semibold;
+  @apply text-[#111827] font-semibold;
 }
 .markdown-content code {
-  @apply bg-[#0A0F18] text-[#C9A94E] px-1.5 py-0.5 rounded text-sm font-mono;
+  @apply bg-[#F1F3F5] text-[#2563EB] px-1.5 py-0.5 rounded-md text-sm font-mono;
 }
 .markdown-content blockquote {
-  @apply border-l-4 border-[#C9A94E] bg-[#0F1521] px-4 py-2 my-3 text-[#8B95A5] italic;
+  @apply border-l-4 border-[#2563EB] bg-[#F8F9FB] px-4 py-2 my-3 text-[#6B7280] italic rounded-r-md;
 }
 
 /* Animations */
@@ -149,9 +189,9 @@ body::before {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes pulse-gold {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 169, 78, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(201, 169, 78, 0); }
+@keyframes pulse-accent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
 }
 .animate-fade-up {
   animation: fadeUp 0.5s ease-out forwards;
@@ -159,8 +199,8 @@ body::before {
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
-.animate-pulse-gold {
-  animation: pulse-gold 2s infinite;
+.animate-pulse-accent {
+  animation: pulse-accent 2s ease-out infinite;
 }
 
 .stagger-1 { animation-delay: 0.08s; opacity: 0; }

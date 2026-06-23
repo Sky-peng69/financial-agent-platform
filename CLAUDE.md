@@ -10,328 +10,131 @@
 | 产品 PRD | [docs/PRD-financial-agent-platform.md](docs/PRD-financial-agent-platform.md) | 规划功能、评估优先级、产品决策 |
 | 技术规范 | [docs/specification-financial-agent-platform.md](docs/specification-financial-agent-platform.md) | 写 API、设计 DB、开发 Agent/Skill、测试、部署 |
 
+---
+
 ## 当前代码状态
 
 | 组件 | 状态 | 说明 |
 | ---- | ---- | ---- |
 | 后端 API | ✅ | FastAPI :8001，`/api/auth/*`、`/api/agents/*`、`/api/tasks` |
-| Commander 编排 | ✅ 已验证 | `POST /api/agents/analyze` 端到端跑通：Commander 规划 4 子任务 → 3 Specialist 并行 → 生成 2659 字报告 |
-| 6 个 Specialist | ✅ | 含 registry.py + agent_runner.py |
-| 单 Agent 运行 | ✅ | `POST /api/agents/{name}/run` |
-| Dashboard 智能分析 | ✅ 已接入 | `api.ts` 新增 `analyze()`，首页新增 Commander 输入卡片 |
+| Commander 编排 | ✅ 已验证 | `POST /api/agents/analyze` 端到端跑通：Commander 规划 4 子任务 → 3 Specialist 并行 → 生成综合报告 |
+| 6 个 Specialist | ✅ | `registry.py` + `agent_runner.py`，每个有独立系统提示词 |
+| 单 Agent 运行 | ✅ | `POST /api/agents/{name}/run`（同步）+ `/run-stream`（SSE 流式） |
+| Dashboard 智能分析 | ✅ 已接入 | `api.ts` 含 `analyze()`，首页 Commander 输入卡片 |
 | 全局侧边栏 | ✅ Codex 风格 | `components/Sidebar.tsx` — 可折叠、近期任务列表、导航高亮 |
 | Agent placeholder | ✅ 已差异化 | 每个 Agent 页面显示专属输入示例 |
-| SSE 流式输出 | ❌ 待实现 | 见 Demo-Task 4 — 单 Agent 运行目前同步等待，需改为流式 |
-| 前端超时/Abort | ⚠️ 已移除默认超时 | `request()` 不再设默认 30s（之前导致非 analyze 请求也被 abort） |
+| **SSE 流式输出** | ✅ 已完成 | `POST /api/agents/{name}/run-stream` — 逐字实时流式，支持停止生成，详见 [agent_runner.py](backend/app/services/agent_runner.py#L52) |
+| **DeepSeek 原生联网搜索** | ✅ 已启用 | 所有 LLM 调用默认启用 `web_search_options`（`search_context_size: medium`），模型自动判断是否搜索，和 DeepSeek 官网一致。实现见 [llm.py](backend/app/services/llm.py#L57) |
+| **系统提示词日期注入** | ✅ | 每次调用自动注入当前日期 `_today_date()`，提示模型注意时间上下文 |
+| **结果复制与重新生成** | ✅ | Agent 页面 `[name]/page.tsx`、任务详情 `tasks/[id]/page.tsx`、Dashboard `page.tsx` 均含复制按钮（反馈动画）和重新生成按钮 |
+| **流式完成保留结果** | ✅ | Agent 页面不再自动跳转，结果留在当前页，附带操作按钮 |
 | PostgreSQL | ✅ | :5433 |
 | Redis | ✅ | :6379 |
 | Docker | ✅ | 镜像已重建，bcrypt==4.1.3 持久固化 |
 | GitHub | ✅ | `truongthimy405-cell/financial-agent-platform`，remote origin 已配置 |
 
-## Demo 任务清单
+---
+
+## ✅ Demo 任务清单（全部完成）
 
 > Demo 目标：用户输入问题 → Commander 规划 → 多 Specialist 并行 → 展示综合报告。
-> ✅ Demo-Task 1~3 已完成。当前唯一待做任务：
+> 以下 4 个 Demo Task 全部完成，无剩余待办。
 
-### ~~Demo-Task 1: api.ts 新增 analyze + Dashboard 智能分析入口~~ ✅ 已完成
+### Demo-Task 1: api.ts 新增 analyze + Dashboard 智能分析入口 ✅
 
-### ~~Demo-Task 2: 任务详情页解析 Commander JSON~~ ✅ 已完成
+见 [frontend/src/lib/api.ts](frontend/src/lib/api.ts#L89) `runStream()`、[frontend/src/lib/api.ts](frontend/src/lib/api.ts#L175) `analyze()`，Dashboard 页 Commander 输入卡片。
 
-### ~~Demo-Task 3: 基础错误处理~~ ✅ 已完成（`request()` 已移除默认 30s 超时，analyze/run 各设独立超时）
+### Demo-Task 2: 任务详情页解析 Commander JSON ✅
+
+见 [frontend/src/app/dashboard/tasks/[id]/page.tsx](frontend/src/app/dashboard/tasks/[id]/page.tsx#L82) — 解析 `input_data` JSON，可视化编排计划 + 子任务结果（可折叠）+ 综合报告。
+
+### Demo-Task 3: 基础错误处理 ✅
+
+`request()` 不再设默认 30s 超时；`analyze()` 设 5min；`runStream()` 用 AbortController + SSE error 事件处理；401/403 统一跳转登录页。
+
+### Demo-Task 4: 单 Agent 运行改为 SSE 流式输出 ✅
+
+- 后端：[agent_runner.py](backend/app/services/agent_runner.py#L52) `run_agent_sse()` — 创建 running Task → 流式调用 DeepSeek → 更新 Task → yield done/error
+- API：[agents.py](backend/app/api/agents.py#L54) `POST /api/agents/{name}/run-stream` — `StreamingResponse` + SSE
+- 前端：[api.ts](frontend/src/lib/api.ts#L89) `runStream()` — ReadableStream + SSE 帧解析 + AbortController
+- UI：[page.tsx](frontend/src/app/dashboard/agents/[name]/page.tsx#L206) — 实时流式卡片 + 停止生成按钮
 
 ---
 
-### Demo-Task 4: 单 Agent 运行改为 SSE 流式输出 🔥
+## 🔮 值得优先优化的改进项
 
-**为什么**：当前 `POST /api/agents/{name}/run` 同步等待 DeepSeek 响应完才返回，用户面对白屏干等几分钟。需要像 DeepSeek Chat 一样实时流式输出，让用户看到 AI 思考进度，同时避免前端超时 abort。
+| 优先级 | 问题 | 说明 |
+| ------ | ---- | ---- |
+| 🔴 高 | 无真实金融数据接入 | Agent 仅靠联网搜索文字结果，无结构化数据（股价、财报、宏观指标序列）。建议接入 Tushare Pro / 东方财富 API |
+| 🔴 高 | 搜索引用未持久化 | DeepSeek 流式返回的 `search_results` 未保存到 Task，详情页看不到引用来源 |
+| 🔴 高 | 无 WebSocket 任务进度 | Commander 多 Agent 并行无实时进度推送，用户只能看骨架屏等待 |
+| 🟡 中 | 无用户反馈机制 | 结果无"有用/无用"评分，无法收集偏好数据优化调度 |
+| 🟡 中 | 任务不可重跑 | 历史任务只能查看，无法基于原参数重新运行 |
+| 🟡 中 | 无 Agent 链式调用 | 无法让一个 Agent 输出作为另一个输入（如"先分析行业再据此选股"） |
+| 🟡 中 | 移动端适配差 | 未做响应式断点优化 |
+| 🟡 中 | 无 PDF/Excel 导出 | 金融报告用户需要下载专业格式文件 |
+| 🟢 低 | 无 A/B 测试 | 无法对比不同 prompt/模型参数的效果 |
+| 🟢 低 | 日志/监控缺失 | 无请求耗时、Token 消耗、错误率统计 |
+| 🟢 低 | 无单元测试 | 后端 0 + 前端 0 |
 
-**现有基础（不需要重写）**：
-- `backend/app/services/llm.py` — `chat_stream()` 已实现，返回 `AsyncGenerator[str, None]`
-- `sse-starlette` 已安装（3.4.4）
-- `backend/app/services/agent_runner.py` — `run_agent_stream()` 目前用非流式调用，需改
-- `backend/app/models/__init__.py` — Task 模型有 `output_data: Text` 字段
+---
 
-**后端要做的事**：
+## ✅ Bug 修复（2026-06-23 全部完成）
 
-#### Step 1: 修改 `agent_runner.py` — 新增流式运行函数
+> 以下 11 个 bug 已全部修复，详见下方各条目。
 
-在现有 `run_agent_stream()` 下方新增 `run_agent_sse()`：
+### 🔴 P0 — 已修复
 
-```python
-# backend/app/services/agent_runner.py 新增
+- [x] **Bug 1: `_today_date()` 冻结在模块导入时** — 修复：将 `SYSTEM_PROMPT` 常量改为 `get_system_prompt()` 函数，每次请求时动态计算日期
+- [x] **Bug 2: `_today_date()` 时区错误** — 修复：`datetime.now(BEIJING_TZ)` 其中 `BEIJING_TZ = timezone(timedelta(hours=8))`
+- [x] **Bug 3: SSE 客户端断开后 Task 永久卡 RUNNING** — 修复：在 `run_agent_sse()` 中添加 `finally` 块，兜底将 RUNNING 状态 Task 标记为 failed
+- [x] **Bug 4: DB 双提交失败无重试** — 修复：抽取 `_commit_with_retry()` 函数，3 次指数退避重试
 
-import uuid
-from datetime import datetime, timezone
-from app.models import Task, TaskStatus
+### 🟡 P1 — 已修复
 
-async def run_agent_sse(
-    agent_name: str,
-    title: str,
-    user_input: str,
-    user_id: str,
-    db: AsyncSession,
-):
-    """
-    SSE 流式运行单个 Agent。
-    先创建 Task (status=running)，流式产出 chunk，结束后更新 Task 并 yield 最终结果。
-    """
-    from app.agents.registry import get_specialist_prompt
-    from app.services.llm import get_client
+- [x] **Bug 5: `chat()` 和 `chat_stream()` 是死代码** — 决策：方案 B，所有调用方统一走 `chat()`/`chat_stream()`。`agent_runner.py` 和 `orchestrator.py` 已改为使用这两个函数
+- [x] **Bug 6: SYSTEM_PROMPT 从未传给 Specialist Agent** — 修复：`chat()`/`chat_stream()` 接受 `system_prompt` 参数，内部合并全局 `get_system_prompt()` + Specialist 提示词
+- [x] **Bug 7: 搜索引用在所有直接 API 调用中被丢弃** — 修复：Bug 5/6 解决后，所有路径统一走 `chat()`，搜索引用提取逻辑自动生效
 
-    system_prompt = get_specialist_prompt(agent_name) or ""
-    client = get_client()
+### 🟠 P2 — 已修复
 
-    # 1) 创建 running 状态的 Task
-    task = Task(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        agent_name=agent_name,
-        title=title,
-        input_data=user_input,
-        status=TaskStatus.RUNNING,
-    )
-    db.add(task)
-    await db.commit()
+- [x] **Bug 8: 输出质量标准在 4 个地方重复定义** — 修复：将 `OUTPUT_QUALITY_STANDARDS` 内容移入 `llm.py` 的 `get_system_prompt()` 单一来源；移除 `registry.py` 中的重复定义和 Specialist 提示词中的嵌入；移除 `agent_runner.py` 和 `orchestrator.py` 用户消息中的重复质量规则
+- [x] **Bug 9: 用户消息模板重复** — 修复：提取 `USER_MESSAGE_TEMPLATE` 为模块级常量，`run_agent_stream()` 和 `run_agent_sse()` 共用
 
-    # 2) 流式调用 DeepSeek
-    stream = await client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"任务：{title}\n\n用户输入：{user_input}"},
-        ],
-        temperature=0.3,
-        max_tokens=4096,
-        stream=True,
-    )
+### 🔵 P3 — 已修复 / 已记录
 
-    full_output = ""
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            full_output += delta
-            yield {"type": "chunk", "content": delta}
+- [x] **Bug 10: CSS `display:block` 被 `display:table` 覆盖** — 修复：从 `.markdown-content .table-wrapper, .markdown-content table` 选择器组中移除 `table`，仅保留 `.table-wrapper`
+- [x] **Bug 11: globals.css 主题全量重写超出任务范围** — 已记录：当前亮色主题即目标样式；后续如需旧主题或 A/B 测试，将主题变量与表格样式拆分到不同文件
 
-    # 3) 流结束，更新 Task 为 completed
-    task.output_data = full_output
-    task.status = TaskStatus.COMPLETED
-    task.completed_at = datetime.now(timezone.utc)
-    await db.commit()
+---
 
-    # 4) 最后 yield 任务 ID，前端可据此跳转详情页
-    yield {"type": "done", "task_id": task.id}
+## 🗺 Demo 后持续打磨路线图
+
+```text
+Phase 1: 数据层（1–2 周）
+├── 接入 1 个实时金融数据源（Tushare 或 东方财富）
+├── 新增 DataConnector Agent（数据获取 Specialist）
+└── 关键指标前端可视化（K 线、趋势图）
+
+Phase 2: 体验层（2–3 周）
+├── Commander 编排改为 WebSocket 实时进度推送
+├── PDF 报告导出（ReportLab / WeasyPrint）
+├── 任务历史搜索 + 过滤 + 一键重跑
+└── 移动端响应式适配
+
+Phase 3: 智能层（3–4 周）
+├── Agent 链式调用（多步推理流水线）
+├── 用户反馈收集 + 基于反馈优化 Agent 调度
+├── RAG 知识库（公司研报、政策文件向量化检索）
+└── 多轮对话记忆（同一任务上下文延续）
+
+Phase 4: 工程化（4–6 周）
+├── 后端测试覆盖（pytest + 70%+）
+├── 前端 E2E（Playwright）
+├── CI/CD（GitHub Actions → 自动测试 + 部署）
+├── API 限流 + 使用量统计面板
+└── 生产部署（HTTPS + 域名 + 监控告警）
 ```
-
-#### Step 2: 修改 `backend/app/api/agents.py` — 新增 SSE 端点
-
-在 `run_agent` 下方新增流式端点：
-
-```python
-# backend/app/api/agents.py — 在 run_agent 下方新增
-
-from fastapi.responses import StreamingResponse
-import json
-
-@router.post("/{name}/run-stream")
-async def run_agent_stream_sse(
-    name: str,
-    data: TaskCreate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """SSE 流式运行单个 Agent"""
-    agent = get_agent(name)
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{name}' 不存在")
-
-    async def event_stream():
-        async for event in run_agent_sse(
-            agent_name=name,
-            title=data.title,
-            user_input=data.input_data or data.title,
-            user_id=user.id,
-            db=db,
-        ):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-```
-
-> 新增导入：`from fastapi.responses import StreamingResponse` 和 `import json`（放文件顶部）
-> 新增导入：`from app.services.agent_runner import run_agent_stream, run_agent_sse`
-
-#### Step 3: 不需要改旧端点
-
-旧的 `POST /api/agents/{name}/run` 保留不变。新增 `POST /api/agents/{name}/run-stream`，前端渐进切换。
-
-**前端要做的事**：
-
-#### Step 4: `frontend/src/lib/api.ts` — 新增流式调用方法
-
-```typescript
-// 在 agents 对象中新增 runStream 方法
-runStream: (
-  name: string,
-  data: { agent_name: string; title: string; input_data: string },
-  onChunk: (text: string) => void,
-  onDone: (taskId: string) => void,
-  onError: (err: Error) => void,
-): AbortController => {
-  const controller = new AbortController();
-  const t = getToken();
-
-  (async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/agents/${name}/run-stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(t ? { Authorization: `Bearer ${t}` } : {}),
-        },
-        body: JSON.stringify(data),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) throw new ApiError(await res.text(), res.status);
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // 解析 SSE 帧（以 \n\n 分隔）
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || ""; // 保留不完整的最后一帧
-
-        for (const part of parts) {
-          const line = part.replace(/^data: /, "").trim();
-          if (!line) continue;
-          try {
-            const event = JSON.parse(line);
-            if (event.type === "chunk") {
-              onChunk(event.content);
-            } else if (event.type === "done") {
-              onDone(event.task_id);
-            }
-          } catch { /* 跳过解析失败的帧 */ }
-        }
-      }
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        // 用户主动取消，不报错
-        return;
-      }
-      onError(err);
-    }
-  })();
-
-  return controller; // 调用方可以 controller.abort() 取消
-};
-```
-
-> 需要在文件顶部导入 `getToken`（已存在）。
-
-#### Step 5: `frontend/src/app/dashboard/agents/[name]/page.tsx` — 改用流式
-
-修改 `handleRun()` 函数，当前逻辑：
-
-```ts
-// 旧逻辑（替换掉）
-const task = await agentsApi.run(name, { ... });
-setResult(task);
-```
-
-改为流式消费：
-
-```ts
-const [streaming, setStreaming] = useState(false);
-const [streamText, setStreamText] = useState("");
-const controllerRef = useRef<AbortController | null>(null);
-
-async function handleRun() {
-  if (!title.trim()) { setError("请输入任务标题"); return; }
-  setError("");
-  setBusy(true);
-  setStreaming(true);
-  setStreamText("");
-  setResult(null);
-
-  const controller = agentsApi.runStream(
-    name,
-    { agent_name: name, title: title.trim(), input_data: inputData.trim() },
-    // onChunk
-    (text) => setStreamText((prev) => prev + text),
-    // onDone
-    (taskId) => {
-      setBusy(false);
-      setStreaming(false);
-      router.push(`/dashboard/tasks/${taskId}`);
-    },
-    // onError
-    (err) => {
-      setError(err.message || "运行失败");
-      setBusy(false);
-      setStreaming(false);
-    },
-  );
-  controllerRef.current = controller;
-}
-```
-
-在 JSX 的「分析结果」区域上方新增实时流式预览区：
-
-```tsx
-{/* 流式输出区（边跑边写） */}
-{streaming && (
-  <div className="card p-6 mb-8 animate-fade-up">
-    <div className="flex items-center gap-2 mb-4">
-      <div className="w-3 h-3 rounded-full bg-[#C9A94E] animate-pulse-gold" />
-      <span className="text-[#C9A94E] text-sm font-medium">AI 分析中...</span>
-      <button
-        onClick={() => controllerRef.current?.abort()}
-        className="ml-auto text-[#5A6577] text-xs hover:text-[#D95A4A] transition-colors"
-      >
-        停止生成
-      </button>
-    </div>
-    {streamText ? (
-      <div className="markdown-content">
-        <ReactMarkdown>{streamText}</ReactMarkdown>
-      </div>
-    ) : (
-      <div className="flex items-center gap-2 text-[#5A6577] text-sm">
-        <span className="w-4 h-4 border-2 border-[#5A6577]/30 border-t-[#C9A94E] rounded-full animate-spin" />
-        正在连接 AI...
-      </div>
-    )}
-  </div>
-)}
-```
-
-> 新增 import：`useRef`（从 react）
-> 按钮改文字：busy 时显示"AI 分析中..."而非原来的"AI 分析中..."
-
-**判定标准**：
-1. 进入任意 Agent 页面，输入标题，点「开始分析」
-2. 出现「AI 分析中...」卡片，**逐字/逐段实时输出 Markdown**
-3. 流式结束后自动跳转到任务详情页
-4. 点击「停止生成」能中止请求
-
-> 📌 前后端都改完后调 `Skill:verification-before-completion` 验证
 
 ---
 
@@ -354,12 +157,12 @@ test@test.com / 123456
 
 ## 技术栈
 
-- 后端: Python 3.12 + FastAPI + SQLAlchemy 2.0 + Redis + DeepSeek API
-- 前端: Next.js 14 + TypeScript + Tailwind CSS
-- 数据库: PostgreSQL 16 + pgvector
-- 容器: Docker Compose（开发）/ K8s（生产规划）
-- 架构: Commander → 12 Specialist Agents → Report Synthesizer
-- 数据协议: MCP (Model Context Protocol)
+- 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Redis + DeepSeek API（含原生联网搜索 `web_search_options`）
+- 前端：Next.js 14 + TypeScript + Tailwind CSS + ReactMarkdown
+- 数据库：PostgreSQL 16 + pgvector
+- 容器：Docker Compose（开发）/ K8s（生产规划）
+- 架构：Commander → 12 Specialist Agents → Report Synthesizer
+- 数据协议：MCP (Model Context Protocol)
 
 ## 代码原则
 
