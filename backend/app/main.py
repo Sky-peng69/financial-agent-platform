@@ -24,9 +24,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+import os
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        os.getenv("FRONTEND_URL", ""),
+        # Netlify 部署域名
+        "https://yijin-301.netlify.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
