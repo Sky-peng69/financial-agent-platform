@@ -7,7 +7,6 @@ services:
     dockerContext: ./backend
     envVars:
       - key: DEEPSEEK_API_KEY
-        sync: false
         value: sk-4798701be73f4753be3d9ccb34ff0b37
       - key: SECRET_KEY
         generateValue: true
