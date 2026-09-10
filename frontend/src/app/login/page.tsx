@@ -8,8 +8,6 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("investor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -28,7 +26,7 @@ export default function LoginPage() {
       if (mode === "login") {
         await login(email, password);
       } else {
-        await register({ email, password, name, role });
+        await register({ email, password });
       }
       router.push("/dashboard");
     } catch (err: any) {
@@ -55,34 +53,6 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {mode === "register" && (
-            <>
-              <div>
-                <label className="label">姓名</label>
-                <input
-                  className="input-field"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="你的真实姓名"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">角色</label>
-                <select
-                  className="input-field"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="investor">个人投资者</option>
-                  <option value="org_user">机构用户（银行员工）</option>
-                  <option value="admin">平台管理员</option>
-                </select>
-              </div>
-            </>
-          )}
-
           <div>
             <label className="label">邮箱</label>
             <input

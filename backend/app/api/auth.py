@@ -17,17 +17,11 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="邮箱已被注册")
 
-    # 验证角色
-    try:
-        role = UserRole(data.role)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"无效的角色: {data.role}")
-
     user = User(
         email=data.email,
         hashed_password=hash_password(data.password),
-        name=data.name,
-        role=role,
+        name="用户",
+        role=UserRole.INVESTOR,
     )
     db.add(user)
     await db.commit()
