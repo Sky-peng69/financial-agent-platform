@@ -9,10 +9,9 @@ from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_runtime_config()
     if not settings.deepseek_api_key:
-        raise ValueError(
-            "DEEPSEEK_API_KEY 未设置！请在 .env 文件中配置 DEEPSEEK_API_KEY=sk-..."
-        )
+        raise ValueError("DEEPSEEK_API_KEY 未设置！请在 .env 文件中配置")
     await init_db()
     yield
 
@@ -44,10 +43,12 @@ app.add_middleware(
 from app.api.auth import router as auth_router
 from app.api.agents import router as agents_router
 from app.api.tasks import router as tasks_router
+from app.api.files import router as files_router
 
 app.include_router(auth_router)
 app.include_router(agents_router)
 app.include_router(tasks_router)
+app.include_router(files_router)
 
 
 @app.get("/health")

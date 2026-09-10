@@ -65,3 +65,15 @@ class AgentInfo(BaseModel):
     description: str
     category: str
     tools: list[str] = []
+
+
+class ResearchFileResponse(BaseModel):
+    id: str
+    task_id: str | None = None
+    original_name: str
+    content_type: str
+    size_bytes: int
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

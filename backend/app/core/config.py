@@ -11,6 +11,7 @@ def _fix_database_url(url: str) -> str:
 
 
 class Settings(BaseSettings):
+    environment: str = "development"
     database_url: str = "postgresql+asyncpg://finagent:finagent_dev@localhost:5432/finagent"
     redis_url: str = "redis://localhost:6379/0"
     deepseek_api_key: str = ""
@@ -18,12 +19,22 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-in-production"
     tushare_token: str = ""
     debug: bool = True
+    storage_path: str = "./storage"
+    max_upload_size_mb: int = 20
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.database_url = _fix_database_url(self.database_url)
+
+    def validate_runtime_config(self) -> None:
+        """拒绝使用不安全的生产环境默认配置。"""
+        if self.environment.lower() in {"production", "staging"}:
+            if not self.deepseek_api_key:
+                raise ValueError("生产环境必须配置 DEEPSEEK_API_KEY")
+            if not self.secret_key or self.secret_key == "dev-secret-change-in-production":
+                raise ValueError("生产环境必须配置安全的 SECRET_KEY")
 
 
 settings = Settings()
