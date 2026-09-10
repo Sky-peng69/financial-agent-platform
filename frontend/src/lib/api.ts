@@ -68,6 +68,10 @@ export const auth = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  demo: () =>
+    request<{ access_token: string; user: User }>("/api/auth/demo", {
+      method: "POST",
+    }),
 };
 
 // 全局活跃的流式请求控制器，确保同一时间只有一个流

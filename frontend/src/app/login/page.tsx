@@ -5,32 +5,40 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/store";
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const { user, login, register } = useAuth();
+  const { user, login, demoLogin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (user) router.replace("/dashboard");
   }, [user, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      if (mode === "login") {
-        await login(email, password);
-      } else {
-        await register({ email, password });
-      }
+      await login(email, password);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "操作失败");
+      setError(err.message || "登录失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDemoLogin() {
+    setError("");
+    setBusy(true);
+    try {
+      await demoLogin();
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "暂时无法进入开发体验");
     } finally {
       setBusy(false);
     }
@@ -39,12 +47,8 @@ export default function LoginPage() {
   return (
     <div className="flex items-center justify-center p-8 h-full bg-[#F8F9FB]">
       <div className="w-full max-w-[400px] animate-fade-up">
-        <h2 className="text-[#111827] text-2xl font-semibold mb-1">
-          {mode === "login" ? "登录" : "注册"}
-        </h2>
-        <p className="text-[#9CA3AF] text-sm mb-8">
-          {mode === "login" ? "欢迎回来，请登录你的账户" : "创建账户，开始使用智能金融分析"}
-        </p>
+        <h2 className="text-[#111827] text-2xl font-semibold mb-1">进入衡策</h2>
+        <p className="text-[#9CA3AF] text-sm mb-8">智能金融研究工作台</p>
 
         {error && (
           <div className="bg-[#FEF2F2] border border-[#DC2626]/20 text-[#DC2626] text-sm px-4 py-3 rounded-lg mb-6">
@@ -52,7 +56,20 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <button className="btn-primary w-full" type="button" onClick={handleDemoLogin} disabled={busy}>
+          {busy ? "进入中..." : "进入开发体验"}
+        </button>
+        <p className="text-[#9CA3AF] text-xs text-center mt-3">
+          无需注册，直接体验 A 股智能研究流程
+        </p>
+
+        <div className="flex items-center gap-3 my-8">
+          <div className="h-px bg-[#E5E7EB] flex-1" />
+          <span className="text-[#9CA3AF] text-xs">已有账户</span>
+          <div className="h-px bg-[#E5E7EB] flex-1" />
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="label">邮箱</label>
             <input
@@ -72,26 +89,16 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "register" ? "至少 6 位字符" : "输入密码"}
+              placeholder="输入密码"
               required
               minLength={6}
             />
           </div>
 
-          <button className="btn-primary w-full mt-2" type="submit" disabled={busy}>
-            {busy ? "处理中..." : mode === "login" ? "登录" : "创建账户"}
+          <button className="btn-secondary w-full" type="submit" disabled={busy}>
+            登录已有账户
           </button>
         </form>
-
-        <p className="text-[#9CA3AF] text-sm text-center mt-8">
-          {mode === "login" ? "还没有账户？" : "已有账户？"}
-          <button
-            className="text-[#2563EB] hover:text-[#1D4ED8] ml-1 transition-colors font-medium"
-            onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
-          >
-            {mode === "login" ? "立即注册" : "去登录"}
-          </button>
-        </p>
       </div>
     </div>
   );
