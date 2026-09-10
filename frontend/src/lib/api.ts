@@ -26,7 +26,12 @@ async function request<T>(
 
   const { signal, ...rest } = options;
 
-  const res = await fetch(`${API_URL}${path}`, { ...rest, headers, signal });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...rest, headers, signal });
+  } catch {
+    throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
+  }
 
   // 401/403 统一处理：清除 token，跳转登录页
   if (res.status === 401 || res.status === 403) {
