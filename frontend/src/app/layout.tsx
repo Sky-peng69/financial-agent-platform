@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="bg-[#080C14] text-[#B9C2D4] antialiased min-h-screen">
+      <body className="bg-white text-[#374151] antialiased min-h-screen">
         <AuthProvider>
           <AppShell>{children}</AppShell>
         </AuthProvider>

@@ -9,3 +9,15 @@ dist/
 build/
 pgdata/
 .DS_Store
+
+# Local Netlify folder
+.netlify
+
+# LaTeX / Pandoc build artifacts
+*.aux
+*.log
+*.out
+
+# Frontend build & test artifacts
+*.tsbuildinfo
+frontend/test-results/

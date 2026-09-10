@@ -90,7 +90,7 @@ export const agents = {
     name: string,
     data: { agent_name: string; title: string; input_data: string },
     onChunk: (text: string) => void,
-    onDone: (taskId: string) => void,
+    onDone: (taskId: string, searchReferences: SearchReference[] | null) => void,
     onError: (err: Error) => void,
   ): AbortController => {
     const controller = new AbortController();
@@ -149,7 +149,7 @@ export const agents = {
               if (event.type === "chunk") {
                 onChunk(event.content);
               } else if (event.type === "done") {
-                onDone(event.task_id);
+                onDone(event.task_id, event.search_references || null);
               } else if (event.type === "error") {
                 onError(new Error(event.message));
               }
@@ -194,6 +194,7 @@ export const agents = {
         output_data: string;
         plan: any;
         subtask_results: any[];
+        search_references: SearchReference[] | null;
       }) => void;
       onError: (err: Error) => void;
     },
@@ -266,6 +267,7 @@ export const agents = {
                     output_data: event.output_data,
                     plan: event.plan,
                     subtask_results: event.subtask_results,
+                    search_references: event.search_references || null,
                   });
                   break;
                 case "error":
@@ -292,6 +294,15 @@ export const agents = {
 };
 
 // Tasks
+export interface SearchReference {
+  name?: string;
+  title?: string;
+  url?: string;
+  link?: string;
+  snippet?: string;
+  content?: string;
+}
+
 export interface Task {
   id: string;
   agent_name: string;
@@ -299,6 +310,7 @@ export interface Task {
   status: "pending" | "running" | "completed" | "failed";
   input_data: string | null;
   output_data: string | null;
+  search_references: string | null;
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
@@ -316,6 +328,17 @@ export interface User {
   role: string;
   organization_id: string | null;
   is_active: boolean;
+}
+
+export function parseSearchReferences(raw: string | null): SearchReference[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function setToken(t: string) {

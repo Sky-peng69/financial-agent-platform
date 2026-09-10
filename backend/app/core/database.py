@@ -19,3 +19,9 @@ async def get_db() -> AsyncSession:
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 开发阶段：为新列做向前兼容（后续可用 Alembic 替代）
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS search_references TEXT"
+            )
+        )

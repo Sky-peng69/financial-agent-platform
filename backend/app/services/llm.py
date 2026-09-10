@@ -113,13 +113,17 @@ async def chat(
     model: str = "deepseek-chat",
     enable_search: bool = True,
     system_prompt: str = "",
-) -> str:
+) -> tuple[str, list[dict] | None]:
     """
     调用 DeepSeek Chat API，默认启用联网搜索（和 DeepSeek 官网一样的行为）。
     模型会自动判断是否需要搜索，搜索时返回引用来源。
 
     system_prompt: 额外的系统提示词（会追加到全局 SYSTEM_PROMPT 之后），
                    用于注入 Specialist 角色提示词。
+
+    返回 (content, search_results):
+      - content: 模型回复文本（含格式化的搜索引用附录）
+      - search_results: 原始搜索引用列表，或 None
     """
     client = get_client()
     full_system = get_system_prompt()
@@ -153,7 +157,7 @@ async def chat(
             ref_lines.append(f"- [{name}]({url})  — {snippet[:120]}")
         content += "\n".join(ref_lines)
 
-    return content
+    return content, search_results if isinstance(search_results, list) else None
 
 
 async def chat_stream(
@@ -167,6 +171,10 @@ async def chat_stream(
     模型自动判断是否搜索，流式返回时搜索引用会追加到最后。
 
     system_prompt: 额外的系统提示词（会追加到全局 SYSTEM_PROMPT 之后）。
+
+    Yields dicts:
+      {"type": "chunk", "content": "..."}   — 文本片段
+      {"type": "search_results", "results": [...]}  — 联网搜索引用（流结束后，如有）
     """
     client = get_client()
     full_system = get_system_prompt()
@@ -187,6 +195,20 @@ async def chat_stream(
         extra_body=extra if extra else None,
     )
 
+    collected_search_results: list[dict] = []
+
     async for chunk in response:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+        # 尝试从 chunk 收集搜索引用（DeepSeek 可能在 delta 或顶层返回）
+        delta = chunk.choices[0].delta
+        sr = getattr(delta, "search_results", None) or getattr(chunk, "search_results", None)
+        if sr and isinstance(sr, list):
+            for item in sr:
+                if item not in collected_search_results:
+                    collected_search_results.append(item)
+
+        if delta.content:
+            yield {"type": "chunk", "content": delta.content}
+
+    # 流结束后，如有搜索引用，yield 出来
+    if collected_search_results:
+        yield {"type": "search_results", "results": collected_search_results}

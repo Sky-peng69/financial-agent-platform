@@ -45,6 +45,7 @@ class TaskResponse(BaseModel):
     status: str
     input_data: str | None = None
     output_data: str | None = None
+    search_references: str | None = None
     error_message: str | None = None
     created_at: datetime
     completed_at: datetime | None = None

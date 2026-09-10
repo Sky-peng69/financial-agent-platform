@@ -55,10 +55,10 @@ function truncate(text: string, max: number): string {
 
 // 状态颜色映射
 const STATUS_COLORS: Record<string, string> = {
-  completed: "#34A584",
-  running: "#C9A94E",
-  pending: "#8B95A5",
-  failed: "#D95A4A",
+  completed: "#059669",
+  running: "#2563EB",
+  pending: "#9CA3AF",
+  failed: "#DC2626",
 };
 
 export default function Sidebar() {
@@ -105,26 +105,26 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex flex-col bg-[#0F1521] border-r border-[#1E2A3E] transition-all duration-300 ease-in-out h-screen sticky top-0 select-none ${
+      className={`flex flex-col bg-[#F8F9F9] border-r border-[#E5E7EB] transition-all duration-300 ease-in-out h-screen sticky top-0 select-none ${
         collapsed ? "w-[56px]" : "w-[220px]"
       }`}
     >
       {/* ── 顶部：Logo + 折叠按钮 ── */}
       <div
-        className={`flex items-center border-b border-[#1E2A3E] ${
+        className={`flex items-center border-b border-[#E5E7EB] ${
           collapsed ? "h-12 justify-center px-0" : "h-12 px-3 gap-2"
         }`}
       >
         {/* Logo 方块 */}
-        <div className="w-7 h-7 bg-[#C9A94E] rounded-sm flex items-center justify-center flex-shrink-0">
-          <span className="text-[#080C14] font-bold text-sm leading-none">
+        <div className="w-7 h-7 bg-[#2563EB] rounded-md flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-bold text-sm leading-none">
             衡
           </span>
         </div>
 
         {/* 展开时显示名称 */}
         {!collapsed && (
-          <span className="text-[#E8EDF5] font-semibold text-sm tracking-wide flex-1">
+          <span className="text-[#111827] font-semibold text-sm tracking-wide flex-1">
             衡策
           </span>
         )}
@@ -132,7 +132,7 @@ export default function Sidebar() {
         {/* 折叠按钮 */}
         <button
           onClick={toggleCollapsed}
-          className={`text-[#5A6577] hover:text-[#8B95A5] transition-colors flex-shrink-0 ${
+          className={`text-[#9CA3AF] hover:text-[#6B7280] transition-colors flex-shrink-0 ${
             collapsed ? "hidden" : ""
           }`}
           title="折叠侧边栏"
@@ -156,7 +156,7 @@ export default function Sidebar() {
       {collapsed && (
         <button
           onClick={toggleCollapsed}
-          className="flex items-center justify-center h-8 text-[#5A6577] hover:text-[#8B95A5] transition-colors"
+          className="flex items-center justify-center h-8 text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
           title="展开侧边栏"
         >
           <svg
@@ -183,19 +183,19 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
-              className={`flex items-center rounded-sm transition-all duration-150 group ${
+              className={`flex items-center rounded-lg transition-all duration-150 group ${
                 collapsed
                   ? "justify-center h-9 w-full"
                   : "gap-2.5 px-3 py-2"
               } ${
                 active
-                  ? "text-[#E8EDF5] bg-[#C9A94E]/10"
-                  : "text-[#5A6577] hover:text-[#B9C2D4] hover:bg-[#141C2B]"
+                  ? "text-[#2563EB] bg-[#EFF6FF]"
+                  : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F1F3F5]"
               }`}
             >
               <span
                 className={`flex-shrink-0 ${
-                  active ? "text-[#C9A94E]" : ""
+                  active ? "text-[#2563EB]" : ""
                 }`}
               >
                 {item.icon}
@@ -209,13 +209,13 @@ export default function Sidebar() {
       </nav>
 
       {/* ── 分隔线 ── */}
-      <div className="mx-3 border-t border-[#1E2A3E]" />
+      <div className="mx-3 border-t border-[#E5E7EB]" />
 
       {/* ── 最近任务 ── */}
       {!collapsed && (
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           <div className="px-4 py-2.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#5A6577]">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
               近期分析
             </span>
           </div>
@@ -226,10 +226,10 @@ export default function Sidebar() {
                 <button
                   key={task.id}
                   onClick={() => router.push(`/dashboard/tasks/${task.id}`)}
-                  className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-sm transition-colors text-[13px] group ${
+                  className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-[13px] group ${
                     pathname === `/dashboard/tasks/${task.id}`
-                      ? "text-[#E8EDF5] bg-[#141C2B]"
-                      : "text-[#8B95A5] hover:text-[#B9C2D4] hover:bg-[#141C2B]"
+                      ? "text-[#111827] bg-[#F1F3F5]"
+                      : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F1F3F5]"
                   }`}
                 >
                   {/* 状态指示点 */}
@@ -237,7 +237,7 @@ export default function Sidebar() {
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{
                       backgroundColor:
-                        STATUS_COLORS[task.status] || "#5A6577",
+                        STATUS_COLORS[task.status] || "#9CA3AF",
                     }}
                   />
                   <span className="truncate flex-1">
@@ -247,7 +247,7 @@ export default function Sidebar() {
               ))}
             </div>
           ) : (
-            <div className="px-4 py-4 text-[11px] text-[#5A6577] leading-relaxed">
+            <div className="px-4 py-4 text-[11px] text-[#9CA3AF] leading-relaxed">
               {user ? "暂无分析记录" : "登录后查看"}
             </div>
           )}
@@ -256,7 +256,7 @@ export default function Sidebar() {
 
       {/* ── 底部：用户信息 ── */}
       <div
-        className={`border-t border-[#1E2A3E] ${
+        className={`border-t border-[#E5E7EB] ${
           collapsed ? "p-2 flex justify-center" : "p-3"
         }`}
       >
@@ -267,23 +267,23 @@ export default function Sidebar() {
             }`}
           >
             {/* 头像 */}
-            <div className="w-7 h-7 rounded-full bg-[#C9A94E]/20 text-[#C9A94E] flex items-center justify-center flex-shrink-0 text-xs font-semibold">
+            <div className="w-7 h-7 rounded-full bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center flex-shrink-0 text-xs font-semibold">
               {avatarLetter(user.name)}
             </div>
 
             {!collapsed && (
               <>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[#B9C2D4] text-[12px] font-medium truncate">
+                  <div className="text-[#374151] text-[12px] font-medium truncate">
                     {user.name}
                   </div>
-                  <div className="text-[#5A6577] text-[11px]">{roleLabel}</div>
+                  <div className="text-[#9CA3AF] text-[11px]">{roleLabel}</div>
                 </div>
 
                 {/* 退出按钮 */}
                 <button
                   onClick={logout}
-                  className="text-[#5A6577] hover:text-[#D95A4A] transition-colors flex-shrink-0"
+                  className="text-[#9CA3AF] hover:text-[#DC2626] transition-colors flex-shrink-0"
                   title="退出登录"
                 >
                   <svg
@@ -306,7 +306,7 @@ export default function Sidebar() {
           </div>
         ) : (
           <div
-            className={`text-[#5A6577] ${
+            className={`text-[#9CA3AF] ${
               collapsed ? "text-[10px]" : "text-[12px]"
             }`}
           >

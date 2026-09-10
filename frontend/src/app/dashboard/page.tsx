@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import { agents as agentsApi, tasks as tasksApi, type Agent, type Task } from "@/lib/api";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
+import SearchReferences from "@/components/SearchReferences";
+import { agents as agentsApi, tasks as tasksApi, type Agent, type Task, type SearchReference, parseSearchReferences } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [phaseMessage, setPhaseMessage] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentProgress[]>([]);
   const [parsedPlan, setParsedPlan] = useState<any>(null);
+  const [dashboardSearchRefs, setDashboardSearchRefs] = useState<SearchReference[] | null>(null);
   const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -62,6 +64,10 @@ export default function DashboardPage() {
     copyToClipboard(text).then((ok) => {
       if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
     });
+  }
+
+  function handleExportPDF() {
+    window.print();
   }
 
   useEffect(() => {
@@ -88,6 +94,7 @@ export default function DashboardPage() {
     setPhaseMessage("");
     setAgentProgress([]);
     setParsedPlan(null);
+    setDashboardSearchRefs(null);
   }
 
   async function handleAnalyze() {
@@ -125,6 +132,7 @@ export default function DashboardPage() {
         onDone: (result) => {
           setAnalyzeLoading(false);
           setAnalyzePhase("");
+          setDashboardSearchRefs(result.search_references);
           setAnalyzeResult({
             id: result.task_id,
             agent_name: "commander",
@@ -132,6 +140,7 @@ export default function DashboardPage() {
             status: "completed",
             input_data: JSON.stringify({ plan: result.plan, subtask_results: result.subtask_results }),
             output_data: result.output_data,
+            search_references: null,
             error_message: null,
             created_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
@@ -423,8 +432,8 @@ export default function DashboardPage() {
                           <span className="text-[#9CA3AF] text-xs group-open:hidden">展开</span>
                           <span className="text-[#9CA3AF] text-xs hidden group-open:inline">收起</span>
                         </summary>
-                        <div className="px-4 pb-4 border-t border-[#E5E7EB] pt-4 markdown-content">
-                          <ReactMarkdown>{r.content || "（无内容）"}</ReactMarkdown>
+                        <div className="px-4 pb-4 border-t border-[#E5E7EB] pt-4">
+                          <MarkdownRenderer content={r.content || "（无内容）"} />
                         </div>
                       </details>
                     ))}
@@ -438,9 +447,9 @@ export default function DashboardPage() {
                       <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
                       综合报告
                     </h3>
-                    <div className="markdown-content">
-                      <ReactMarkdown>{analyzeResult.output_data}</ReactMarkdown>
-                    </div>
+                    <MarkdownRenderer content={analyzeResult.output_data} />
+                    {/* Search references */}
+                    <SearchReferences references={dashboardSearchRefs || []} />
                     <div className="flex items-center gap-2 mt-5 pt-4 border-t border-[#E5E7EB]">
                       <button
                         onClick={() => handleCopy(analyzeResult.output_data || "")}
@@ -457,6 +466,13 @@ export default function DashboardPage() {
                             复制报告
                           </>
                         )}
+                      </button>
+                      <button
+                        onClick={handleExportPDF}
+                        className="flex items-center gap-1.5 text-xs text-[#6B7280] hover:text-[#2563EB] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#F1F3F5]"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        导出 PDF
                       </button>
                       <button
                         onClick={handleAnalyze}

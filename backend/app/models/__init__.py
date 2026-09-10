@@ -56,6 +56,7 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     input_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_references: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[TaskStatus] = mapped_column(SAEnum(TaskStatus), default=TaskStatus.PENDING, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

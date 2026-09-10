@@ -1,0 +1,278 @@
+% ============================================================
+% 弈金 · 工行杯策划书 — Pandoc LaTeX 模板
+% 风格：投行研报风（深 Navy + 紫色强调 + PingFang SC）
+% ============================================================
+\PassOptionsToPackage{table,svgnames}{xcolor}
+\documentclass[a4paper,12pt]{ctexart}
+
+% ==================== 包加载（必须在所有配置之前）====================
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=2.8cm, bottom=2.5cm, headheight=32pt]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{calc, positioning, shapes, backgrounds, decorations.pathreplacing}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{framed}
+\usepackage{needspace}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{calc}
+
+% Pandoc 生成的表格使用 \real{...} 来缩放列宽，但该命令在某些 LaTeX
+% 发行版中不可用。这里定义为恒等映射，依赖现代 \dimexpr 的 * <decimal> 支持。
+\newcommand{\real}[1]{#1}
+
+% Pandoc 3.x 用 \pandocbounded 包裹代码块，需要在自定义模板中定义
+\newcommand{\pandocbounded}[1]{#1}
+
+\usepackage{ragged2e}
+\usepackage{parskip}
+\usepackage{letltxmacro}
+\usepackage{longtable}
+\usepackage{etoolbox}
+
+% ==================== 字体设置 ====================
+\setCJKmainfont{PingFang SC}[
+  BoldFont=PingFang SC Medium,
+  ItalicFont=PingFang SC Light
+]
+\setmainfont{PingFang SC}
+\setmonofont{Menlo}[Scale=0.88]
+
+% ==================== 颜色定义 ====================
+\definecolor{deepnavy}{HTML}{1A2744}
+\colorlet{DEEPNAVY}{deepnavy}
+\definecolor{purple}{HTML}{6C5CE7}
+\colorlet{PURPLE}{purple}
+\definecolor{lightbluebg}{HTML}{EBF0F7}
+\definecolor{lightbluealt}{HTML}{F5F7FB}
+\definecolor{darkslate}{HTML}{2D3436}
+\definecolor{codetext}{HTML}{DFE6E9}
+\definecolor{tableheadbg}{HTML}{1A2744}
+\definecolor{tablerowalt}{HTML}{F0F3F8}
+\definecolor{quoteborder}{HTML}{6C5CE7}
+
+% ==================== 超链接 ====================
+\hypersetup{
+  colorlinks=true,
+  linkcolor=purple,
+  urlcolor=purple,
+  citecolor=purple,
+  pdfborder={0 0 0}
+}
+
+% ==================== 行距与段落 ====================
+\onehalfspacing
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+% ==================== 页眉页脚 ====================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\color{deepnavy}弈金 · 工行杯策划书}
+\fancyhead[R]{\footnotesize\color{deepnavy}\leftmark}
+\fancyfoot[C]{\footnotesize\color{deepnavy}—\ \thepage\ —}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{deepnavy!40}\leaders\hrule height \headrulewidth\hfill}}
+
+% ---- 首页样式（标题页之后重置）----
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[C]{\footnotesize\color{deepnavy}—\ \thepage\ —}
+}
+
+% ==================== 关闭自动编号（正文已含中文编号）====================
+\setcounter{secnumdepth}{0}
+
+% Pandoc 使用 \LTcaptype{none} 来禁止表格编号，需要定义 none 计数器
+\newcounter{none}
+
+% ==================== 章节标题样式 ====================
+\ctexset{
+  section = {
+    format = \LARGE\bfseries\color{deepnavy},
+    aftername = \hspace{0.5em},
+    beforeskip = 1.5em,
+    afterskip = 0.8em
+  },
+  subsection = {
+    format = \large\bfseries\color{deepnavy!90},
+    aftername = \hspace{0.4em},
+    beforeskip = 1.2em,
+    afterskip = 0.5em
+  },
+  subsubsection = {
+    format = \normalsize\bfseries\color{deepnavy!80},
+    aftername = \hspace{0.3em},
+    beforeskip = 0.8em,
+    afterskip = 0.3em
+  }
+}
+
+% ==================== Blockquote 样式（左侧 3px 紫色竖线）====================
+\LetLtxMacro{\oldquote}{\quote}
+\LetLtxMacro{\oldendquote}{\endquote}
+\renewenvironment{quote}{%
+  \vspace{0.3em}%
+  \def\FrameCommand{{\color{quoteborder}\vrule width 3pt}}%
+  \def\FirstFrameCommand{{\color{quoteborder}\vrule width 3pt}}%
+  \MakeFramed{\FrameRestore\noindent\ignorespaces}%
+  \small
+}{%
+  \endMakeFramed
+  \vspace{0.3em}%
+}
+
+% ==================== 代码块样式（暗 slate 背景 + 等宽字体）====================
+\lstset{
+  basicstyle=\small\ttfamily\color{codetext},
+  backgroundcolor=\color{darkslate},
+  frame=none,
+  framerule=0pt,
+  rulecolor=\color{darkslate},
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=false,
+  postbreak={\mbox{\textcolor{purple}{{$$\hookrightarrow$$}}}\space},
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  framesep=8pt,
+  framexleftmargin=8pt,
+  framexrightmargin=8pt,
+  escapeinside={}
+}
+
+% ==================== 表格与图片标题样式 ====================
+\captionsetup[table]{
+  font={small,color=deepnavy},
+  labelfont={bf,color=deepnavy},
+  skip=6pt
+}
+
+\captionsetup[figure]{
+  font={small,color=deepnavy!80},
+  labelfont={bf,color=deepnavy},
+  skip=6pt
+}
+
+% ==================== 列表样式 ====================
+\setlist[itemize]{nosep, leftmargin=*, itemsep=0.1em}
+\setlist[enumerate]{nosep, leftmargin=*, itemsep=0.1em}
+
+% ==================== 封面 TikZ 图案（左侧 Agent 网络节点）====================
+\newcommand{\covergeometry}{%
+  \begin{tikzpicture}[scale=0.15]
+    % 背景节点网络
+    \foreach \x in {0,8,...,80} {
+      \foreach \y in {0,12,...,120} {
+        \pgfmathsetmacro{\s}{random(0,100)}
+        \ifnum\s<18
+          \fill[white!10] (\x,\y) circle (0.6);
+        \fi
+        \ifnum\s<6
+          \fill[white!20] (\x,\y) circle (1.0);
+        \fi
+      }
+    }
+    % 连接线
+    \foreach \i in {1,...,25} {
+      \pgfmathsetmacro{\xa}{random(0,80)}
+      \pgfmathsetmacro{\ya}{random(0,120)}
+      \pgfmathsetmacro{\xb}{\xa + random(-20,20)}
+      \pgfmathsetmacro{\yb}{\ya + random(-25,25)}
+      \draw[white!8, line width=0.3] (\xa,\ya) -- (\xb,\yb);
+    }
+    % 亮点节点
+    \foreach \i in {1,...,8} {
+      \pgfmathsetmacro{\x}{random(10,70)}
+      \pgfmathsetmacro{\y}{random(15,105)}
+      \fill[white!30] (\x,\y) circle (2.0);
+      \draw[white!15, line width=0.5] (\x,\y) circle (3.5);
+    }
+  \end{tikzpicture}%
+}
+
+% ==================== 文档开始 ====================
+\begin{document}
+
+% ==================== 封面 ====================
+\begin{titlepage}
+  \thispagestyle{empty}
+  \pagecolor{deepnavy}
+  \color{white}
+
+  \vspace*{\fill}
+
+  % 左侧几何图案区域
+  \begin{minipage}{0.28\textwidth}
+    \vspace{2cm}
+    \covergeometry
+  \end{minipage}
+  \hfill
+  % 右侧标题文字
+  \begin{minipage}{0.72\textwidth}
+    \raggedleft
+    \vspace{2cm}
+
+    {\fontsize{42}{50}\selectfont\bfseries 弈\ 金}
+
+    \vspace{0.8cm}
+
+    {\Large 基于多 Agent 协作的金融 AI 数字员工平台}
+
+    \vspace{0.5cm}
+
+    \begin{tikzpicture}
+      \draw[white!60, line width=0.5] (0,0) -- (12,0);
+    \end{tikzpicture}
+
+    \vspace{0.8cm}
+
+    {\normalsize
+      \resizebox{\linewidth}{!}{第十七届"工行杯"全国大学生金融科技创新大赛}
+    }
+
+    \vspace{0.3cm}
+
+    {\normalsize 校赛策划书}
+
+    \vspace{1.5cm}
+
+    {\small 2026 年 6 月}
+  \end{minipage}
+
+  \vspace*{\fill}
+
+  % 底部细线
+  \begin{tikzpicture}[remember picture, overlay]
+    \draw[white!40, line width=1.0] ($$(current page.south west) + (2.5cm, 3.5cm)$$) -- ($$(current page.south east) + (-2.5cm, 3.5cm)$$);
+    \node[white!50, font=\footnotesize] at ($$(current page.south) + (0, 3.0cm)$$) {让 AI 从"一个聪明人"进化为"一支数字分析团队"};
+  \end{tikzpicture}
+\end{titlepage}
+
+% 恢复白色背景
+\pagecolor{white}
+\color{black}
+
+% ==================== 目录 ====================
+\renewcommand{\contentsname}{\centering\LARGE\color{deepnavy}\bfseries 目\quad 录}
+\tableofcontents
+\newpage
+
+% ==================== 正文开始 ====================
+
+$body$
+
+% ==================== 文档结束 ====================
+\end{document}

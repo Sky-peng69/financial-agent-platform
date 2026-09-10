@@ -50,7 +50,7 @@ async def plan_analysis(user_input: str) -> dict[str, Any]:
     """Commander 分析用户请求，输出执行计划"""
     system_prompt = build_commander_system_prompt()
 
-    content = await chat(
+    content, _ = await chat(
         messages=[{"role": "user", "content": f"请为以下用户请求规划分析计划：\n\n{user_input}"}],
         system_prompt=system_prompt,
         enable_search=False,
@@ -97,9 +97,10 @@ async def run_specialist(agent_name: str, prompt: str) -> dict[str, Any]:
             "agent": agent_name,
             "status": "skipped",
             "content": f"Agent '{agent_name}' 未配置",
+            "search_results": None,
         }
 
-    result = await chat(
+    content, search_results = await chat(
         messages=[{"role": "user", "content": prompt}],
         system_prompt=system_prompt,
     )
@@ -107,7 +108,8 @@ async def run_specialist(agent_name: str, prompt: str) -> dict[str, Any]:
     return {
         "agent": agent_name,
         "status": "completed",
-        "content": result,
+        "content": content,
+        "search_results": search_results,
     }
 
 
@@ -198,6 +200,14 @@ async def run_orchestrated_analysis(
         final_output = final_result["content"]
 
     # Phase 4: 保存到数据库
+    # 收集所有 Specialist 的搜索引用
+    all_search_refs = []
+    for r in results:
+        sr = r.get("search_results")
+        if sr and isinstance(sr, list):
+            all_search_refs.extend(sr)
+    search_refs_json = json.dumps(all_search_refs, ensure_ascii=False) if all_search_refs else None
+
     task = Task(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -209,6 +219,7 @@ async def run_orchestrated_analysis(
             "subtask_results": results,
         }, ensure_ascii=False),
         output_data=final_output,
+        search_references=search_refs_json,
         status=TaskStatus.COMPLETED,
         completed_at=datetime.now(timezone.utc),
     )
@@ -349,6 +360,14 @@ async def run_orchestrated_analysis_sse(
             final_output = final_result["content"]
 
         # ═══ Phase 4: 保存到数据库 ═══
+        # 收集所有 Specialist 的搜索引用
+        all_search_refs: list[dict] = []
+        for r in results:
+            sr = r.get("search_results")
+            if sr and isinstance(sr, list):
+                all_search_refs.extend(sr)
+        search_refs_json = json.dumps(all_search_refs, ensure_ascii=False) if all_search_refs else None
+
         task = Task(
             id=task_id,
             user_id=user_id,
@@ -360,6 +379,7 @@ async def run_orchestrated_analysis_sse(
                 "subtask_results": results,
             }, ensure_ascii=False),
             output_data=final_output,
+            search_references=search_refs_json,
             status=TaskStatus.COMPLETED,
             completed_at=datetime.now(timezone.utc),
         )
@@ -372,6 +392,7 @@ async def run_orchestrated_analysis_sse(
             "output_data": final_output,
             "plan": plan,
             "subtask_results": results,
+            "search_references": all_search_refs if all_search_refs else None,
         }
 
     except Exception as e:

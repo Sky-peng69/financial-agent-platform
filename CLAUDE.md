@@ -2,145 +2,97 @@
 
 多用户金融 AI Agent SaaS 平台。架构融合 **Anthropic Financial Services**（Skills + Connectors + Subagents）与 **阿里云通义点金**（芯—云—模—智），目标让 AI 从"对话框里的聪明人"进化为**能写会算、可审计可追溯的数字员工**。
 
-## 参考文档（任务开始前必读）
+## ⚡ 新会话启动清单
+
+```bash
+# 1. 启动所有容器
+docker-compose -f /Users/laurence/Documents/金融agent/docker-compose.yml up -d
+
+# 2. 等 10 秒后端就绪，验证 3 个页面都 200
+sleep 10
+for path in /dashboard "/dashboard/agents/macro-economy-analyst" "/dashboard/tasks"; do
+  curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:3001${path}"
+done
+
+# 3. 如果任何页面 500 → 清 Next.js 缓存
+rm -rf /Users/laurence/Documents/金融agent/frontend/.next
+docker exec agent-frontend-1 rm -rf /app/.next
+docker restart agent-frontend-1
+# 等 15 秒重新编译，再跑步骤 2
+
+# 4. 登录 http://localhost:3001/login
+# 账号 test@test.com / 123456
+```
+
+## ⚠️ 已知不可逆操作
+
+| 操作 | 后果 | 正确做法 |
+|------|------|----------|
+| 删 `.next` 后不重启容器 | 前端持续 500 | `rm -rf frontend/.next && docker restart agent-frontend-1` |
+| 在容器里 `npm install` | 下次重建镜像就丢 | 改 `package.json`→`docker-compose build frontend` |
+| volume mount 覆盖了 node_modules | `npm install` 完还是找不到模块 | 删 `.next` + 重启 |
+
+## 参考文档
 
 | 文档 | 路径 | 何时读 |
 | ---- | ---- | ------ |
-| 关键架构 | [docs/architecture-financial-agent-platform.md](docs/architecture-financial-agent-platform.md) | 设计架构、新增 Agent、修改编排、连接器、安全合规 |
-| 产品 PRD | [docs/PRD-financial-agent-platform.md](docs/PRD-financial-agent-platform.md) | 规划功能、评估优先级、产品决策 |
-| 技术规范 | [docs/specification-financial-agent-platform.md](docs/specification-financial-agent-platform.md) | 写 API、设计 DB、开发 Agent/Skill、测试、部署 |
+| 关键架构 | [docs/architecture-financial-agent-platform.md](docs/architecture-financial-agent-platform.md) | 设计架构、新增 Agent、修改编排 |
+| 产品 PRD | [docs/PRD-financial-agent-platform.md](docs/PRD-financial-agent-platform.md) | 规划功能、评估优先级 |
+| 技术规范 | [docs/specification-financial-agent-platform.md](docs/specification-financial-agent-platform.md) | 写 API、设计 DB、开发 Agent |
 
----
-
-## 当前代码状态
-
-| 组件 | 状态 | 说明 |
-| ---- | ---- | ---- |
-| 后端 API | ✅ | FastAPI :8001，`/api/auth/*`、`/api/agents/*`、`/api/tasks` |
-| Commander 编排 | ✅ 已验证 | `POST /api/agents/analyze` 端到端跑通：Commander 规划 4 子任务 → 3 Specialist 并行 → 生成综合报告 |
-| 6 个 Specialist | ✅ | `registry.py` + `agent_runner.py`，每个有独立系统提示词 |
-| 单 Agent 运行 | ✅ | `POST /api/agents/{name}/run`（同步）+ `/run-stream`（SSE 流式） |
-| Dashboard 智能分析 | ✅ 已接入 | `api.ts` 含 `analyze()`，首页 Commander 输入卡片 |
-| 全局侧边栏 | ✅ Codex 风格 | `components/Sidebar.tsx` — 可折叠、近期任务列表、导航高亮 |
-| Agent placeholder | ✅ 已差异化 | 每个 Agent 页面显示专属输入示例 |
-| **SSE 流式输出** | ✅ 已完成 | `POST /api/agents/{name}/run-stream` — 逐字实时流式，支持停止生成，详见 [agent_runner.py](backend/app/services/agent_runner.py#L52) |
-| **DeepSeek 原生联网搜索** | ✅ 已启用 | 所有 LLM 调用默认启用 `web_search_options`（`search_context_size: medium`），模型自动判断是否搜索，和 DeepSeek 官网一致。实现见 [llm.py](backend/app/services/llm.py#L57) |
-| **系统提示词日期注入** | ✅ | 每次调用自动注入当前日期 `_today_date()`，提示模型注意时间上下文 |
-| **结果复制与重新生成** | ✅ | Agent 页面 `[name]/page.tsx`、任务详情 `tasks/[id]/page.tsx`、Dashboard `page.tsx` 均含复制按钮（反馈动画）和重新生成按钮 |
-| **流式完成保留结果** | ✅ | Agent 页面不再自动跳转，结果留在当前页，附带操作按钮 |
-| PostgreSQL | ✅ | :5433 |
-| Redis | ✅ | :6379 |
-| Docker | ✅ | 镜像已重建，bcrypt==4.1.3 持久固化 |
-| GitHub | ✅ | `truongthimy405-cell/financial-agent-platform`，remote origin 已配置 |
-
----
-
-## ✅ Demo 任务清单（全部完成）
-
-> Demo 目标：用户输入问题 → Commander 规划 → 多 Specialist 并行 → 展示综合报告。
-> 以下 4 个 Demo Task 全部完成，无剩余待办。
-
-### Demo-Task 1: api.ts 新增 analyze + Dashboard 智能分析入口 ✅
-
-见 [frontend/src/lib/api.ts](frontend/src/lib/api.ts#L89) `runStream()`、[frontend/src/lib/api.ts](frontend/src/lib/api.ts#L175) `analyze()`，Dashboard 页 Commander 输入卡片。
-
-### Demo-Task 2: 任务详情页解析 Commander JSON ✅
-
-见 [frontend/src/app/dashboard/tasks/[id]/page.tsx](frontend/src/app/dashboard/tasks/[id]/page.tsx#L82) — 解析 `input_data` JSON，可视化编排计划 + 子任务结果（可折叠）+ 综合报告。
-
-### Demo-Task 3: 基础错误处理 ✅
-
-`request()` 不再设默认 30s 超时；`analyze()` 设 5min；`runStream()` 用 AbortController + SSE error 事件处理；401/403 统一跳转登录页。
-
-### Demo-Task 4: 单 Agent 运行改为 SSE 流式输出 ✅
-
-- 后端：[agent_runner.py](backend/app/services/agent_runner.py#L52) `run_agent_sse()` — 创建 running Task → 流式调用 DeepSeek → 更新 Task → yield done/error
-- API：[agents.py](backend/app/api/agents.py#L54) `POST /api/agents/{name}/run-stream` — `StreamingResponse` + SSE
-- 前端：[api.ts](frontend/src/lib/api.ts#L89) `runStream()` — ReadableStream + SSE 帧解析 + AbortController
-- UI：[page.tsx](frontend/src/app/dashboard/agents/[name]/page.tsx#L206) — 实时流式卡片 + 停止生成按钮
-
----
-
-## 🔮 值得优先优化的改进项
-
-| 优先级 | 问题 | 说明 |
-| ------ | ---- | ---- |
-| 🔴 高 | 无真实金融数据接入 | Agent 仅靠联网搜索文字结果，无结构化数据（股价、财报、宏观指标序列）。建议接入 Tushare Pro / 东方财富 API |
-| 🔴 高 | 搜索引用未持久化 | DeepSeek 流式返回的 `search_results` 未保存到 Task，详情页看不到引用来源 |
-| 🔴 高 | 无 WebSocket 任务进度 | Commander 多 Agent 并行无实时进度推送，用户只能看骨架屏等待 |
-| 🟡 中 | 无用户反馈机制 | 结果无"有用/无用"评分，无法收集偏好数据优化调度 |
-| 🟡 中 | 任务不可重跑 | 历史任务只能查看，无法基于原参数重新运行 |
-| 🟡 中 | 无 Agent 链式调用 | 无法让一个 Agent 输出作为另一个输入（如"先分析行业再据此选股"） |
-| 🟡 中 | 移动端适配差 | 未做响应式断点优化 |
-| 🟡 中 | 无 PDF/Excel 导出 | 金融报告用户需要下载专业格式文件 |
-| 🟢 低 | 无 A/B 测试 | 无法对比不同 prompt/模型参数的效果 |
-| 🟢 低 | 日志/监控缺失 | 无请求耗时、Token 消耗、错误率统计 |
-| 🟢 低 | 无单元测试 | 后端 0 + 前端 0 |
-
----
-
-## ✅ Bug 修复（2026-06-23 全部完成）
-
-> 以下 11 个 bug 已全部修复，详见下方各条目。
-
-### 🔴 P0 — 已修复
-
-- [x] **Bug 1: `_today_date()` 冻结在模块导入时** — 修复：将 `SYSTEM_PROMPT` 常量改为 `get_system_prompt()` 函数，每次请求时动态计算日期
-- [x] **Bug 2: `_today_date()` 时区错误** — 修复：`datetime.now(BEIJING_TZ)` 其中 `BEIJING_TZ = timezone(timedelta(hours=8))`
-- [x] **Bug 3: SSE 客户端断开后 Task 永久卡 RUNNING** — 修复：在 `run_agent_sse()` 中添加 `finally` 块，兜底将 RUNNING 状态 Task 标记为 failed
-- [x] **Bug 4: DB 双提交失败无重试** — 修复：抽取 `_commit_with_retry()` 函数，3 次指数退避重试
-
-### 🟡 P1 — 已修复
-
-- [x] **Bug 5: `chat()` 和 `chat_stream()` 是死代码** — 决策：方案 B，所有调用方统一走 `chat()`/`chat_stream()`。`agent_runner.py` 和 `orchestrator.py` 已改为使用这两个函数
-- [x] **Bug 6: SYSTEM_PROMPT 从未传给 Specialist Agent** — 修复：`chat()`/`chat_stream()` 接受 `system_prompt` 参数，内部合并全局 `get_system_prompt()` + Specialist 提示词
-- [x] **Bug 7: 搜索引用在所有直接 API 调用中被丢弃** — 修复：Bug 5/6 解决后，所有路径统一走 `chat()`，搜索引用提取逻辑自动生效
-
-### 🟠 P2 — 已修复
-
-- [x] **Bug 8: 输出质量标准在 4 个地方重复定义** — 修复：将 `OUTPUT_QUALITY_STANDARDS` 内容移入 `llm.py` 的 `get_system_prompt()` 单一来源；移除 `registry.py` 中的重复定义和 Specialist 提示词中的嵌入；移除 `agent_runner.py` 和 `orchestrator.py` 用户消息中的重复质量规则
-- [x] **Bug 9: 用户消息模板重复** — 修复：提取 `USER_MESSAGE_TEMPLATE` 为模块级常量，`run_agent_stream()` 和 `run_agent_sse()` 共用
-
-### 🔵 P3 — 已修复 / 已记录
-
-- [x] **Bug 10: CSS `display:block` 被 `display:table` 覆盖** — 修复：从 `.markdown-content .table-wrapper, .markdown-content table` 选择器组中移除 `table`，仅保留 `.table-wrapper`
-- [x] **Bug 11: globals.css 主题全量重写超出任务范围** — 已记录：当前亮色主题即目标样式；后续如需旧主题或 A/B 测试，将主题变量与表格样式拆分到不同文件
-
----
-
-## 🗺 Demo 后持续打磨路线图
+## 核心架构
 
 ```text
-Phase 1: 数据层（1–2 周）
-├── 接入 1 个实时金融数据源（Tushare 或 东方财富）
-├── 新增 DataConnector Agent（数据获取 Specialist）
-└── 关键指标前端可视化（K 线、趋势图）
+用户提问 → Commander 拆解任务 → 多 Specialist 并行分析 → 报告合成师整合输出
 
-Phase 2: 体验层（2–3 周）
-├── Commander 编排改为 WebSocket 实时进度推送
-├── PDF 报告导出（ReportLab / WeasyPrint）
-├── 任务历史搜索 + 过滤 + 一键重跑
-└── 移动端响应式适配
+当前 6 个 Specialist Agent:
+  宏观经济分析师 / 行业研究员 / 基本面分析师 / 消息面分析师 / 财富顾问 / 报告合成师
 
-Phase 3: 智能层（3–4 周）
-├── Agent 链式调用（多步推理流水线）
-├── 用户反馈收集 + 基于反馈优化 Agent 调度
-├── RAG 知识库（公司研报、政策文件向量化检索）
-└── 多轮对话记忆（同一任务上下文延续）
+关键能力:
+  · SSE 流式输出 — 实时逐字推送分析结果
+  · DeepSeek 原生联网搜索 — 每条结论附来源链接
+  · Commander 编排 — 自动识别问题类型，分派 Agent 并行
+  · 搜索引用持久化 — Task.search_references 存档，三页面渲染蓝色链接
+  · PDF 一键导出 — @media print（已知瑕疵：多列表格截断）
 
-Phase 4: 工程化（4–6 周）
-├── 后端测试覆盖（pytest + 70%+）
-├── 前端 E2E（Playwright）
-├── CI/CD（GitHub Actions → 自动测试 + 部署）
-├── API 限流 + 使用量统计面板
-└── 生产部署（HTTPS + 域名 + 监控告警）
+已知缺口（计划中）:
+  · 无真实金融数据源接入（仅联网搜索）
+  · 无 Agent 链式调用（依赖关系串行）
+  · 无用户反馈机制
+  · 无单元测试
 ```
 
----
+## 技术栈
+
+- 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Redis + DeepSeek API
+- 前端：Next.js 14 + TypeScript + Tailwind CSS + ReactMarkdown
+- 数据库：PostgreSQL 16 + pgvector
+- 容器：Docker Compose（开发）/ K8s（生产规划）
+- 数据协议：MCP (Model Context Protocol)
+
+## 测试账号
+
+test@test.com / 123456
+
+## 代码原则
+
+1. **先想后写**：不确定时主动问，不隐藏困惑
+2. **最小改动**：只改任务相关代码，不碰无关文件和格式
+3. **目标驱动**：每个 Task 有判定标准，改完必须验证
+4. **匹配风格**：新代码模仿现有代码的命名和结构
+5. **读→确认→改→验证**：先读完相关文件确认现状，再动手
+6. **基础设施问题不跟功能代码混修**
+7. **一次性验证**：写完整的验证脚本，一次跑完所有检查点
+
+## 🧹 已知技术债（勿在功能开发中混着修）
+
+| 问题 | 现象 | 修复方法 |
+|------|------|----------|
+| Next.js 编译缓存污染 | `.next` 含旧 chunk 引用 → 页面 500 | `rm -rf frontend/.next && docker restart agent-frontend-1` |
+| `remark-gfm` 模块解析失败 | 同上根因 | 同上，清 `.next` 即可 |
+| volume mount 覆盖 node_modules | 宿主编译产物 ≠ 容器内 | 清 `.next` + 重启，不要反复 `npm install` |
 
 ## 必须激活的 Skills
-
-以下 Skill 在对应场景 **强制调用**，禁止裸写：
 
 | Skill | 触发场景 |
 | ---- | ------ |
@@ -151,22 +103,97 @@ Phase 4: 工程化（4–6 周）
 | `writing-plans` | 复杂任务需要先出方案再执行 |
 | `simplify` | 重构代码、去除冗余、清理逻辑 |
 
-## 测试账号
+---
 
-test@test.com / 123456
+## 🏆 工行杯参赛
 
-## 技术栈
+| 项目 | 详情 |
+|------|------|
+| 比赛 | 第十七届"工行杯"全国大学生金融科技创新大赛（校赛阶段） |
+| 项目名称 | **弈金** — 多 Agent 协作金融分析平台 |
+| 参赛形式 | 个人参赛，全栈独立完成 |
 
-- 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Redis + DeepSeek API（含原生联网搜索 `web_search_options`）
-- 前端：Next.js 14 + TypeScript + Tailwind CSS + ReactMarkdown
-- 数据库：PostgreSQL 16 + pgvector
-- 容器：Docker Compose（开发）/ K8s（生产规划）
-- 架构：Commander → 12 Specialist Agents → Report Synthesizer
-- 数据协议：MCP (Model Context Protocol)
+### 参赛文件
 
-## 代码原则
+| 文件 | 用途 |
+|------|------|
+| [docs/competition/策划书-弈金.md](docs/competition/策划书-弈金.md) | 校赛策划书主文档（12 章完整版） |
+| [docs/competition/需求差距分析.md](docs/competition/需求差距分析.md) | 策划书要求 vs 平台现状对照 |
 
-1. **先想后写**：不确定时主动问，不隐藏困惑
-2. **最小改动**：只改任务相关代码，不碰无关文件和格式
-3. **目标驱动**：每个 Task 有判定标准，改完必须验证
-4. **匹配风格**：新代码模仿现有代码的命名和结构
+### 策划书核心叙事
+
+> 弈金用 Commander + Specialist 多 Agent 架构，让 AI 从"一个聪明人"进化为"一支数字分析团队"。
+
+---
+
+## 🔨 待办：策划书 PDF 导出（当前任务）
+
+源文件：[docs/competition/策划书-弈金.md](docs/competition/策划书-弈金.md)（~11,000 字，14 章含大量表格/代码块/ASCII 架构图）
+
+### 已完成的准备工作
+
+| 步骤 | 状态 |
+|------|:--:|
+| 项目改名「融智引擎」→「弈金」（策划书 33 处 + CLAUDE.md + 文件重命名）| ✅ |
+| 策划书内容优化：痛点重写（分析师的一天故事线）| ✅ |
+| 策划书内容优化：竞品深度剖面（ChatGPT/Bloomberg/扣子 × 各半页）| ✅ |
+| 策划书内容优化：商业模式量化（TAM/SAM/SOM + 定价表 + ARR 推演）| ✅ |
+| 章节编号修复（8.1 市场规模/8.2 定价/8.3 切入策略/8.4 量化价值/8.5 应用价值）| ✅ |
+
+### 用户已确认的风格参数
+
+- **整体风格**：投行研报风（像中金/中信行研报告 — 深蓝主色、衬线标题、强调数据表格）
+- **封面**：带几何装饰（Agent 网络节点连线细线图案）
+- **配色**：深 Navy #1a2744 + 紫色强调 #6c5ce7 结合（封面+页眉用深 Navy，表格边框和链接用紫色）
+- **字体**：PingFang SC（苹方，系统自带，已确认可用 — fc-list 验证通过）
+
+### 可用工具（已验证）
+
+| 工具 | 路径 | 状态 |
+|------|------|:--:|
+| Pandoc 3.9 | `/opt/homebrew/bin/pandoc` | ✅ |
+| XeLaTeX | `/Library/TeX/texbin/xelatex` | ✅ |
+| Playwright | Python 可用 | ✅ |
+| `markdown` 库 | Python 3.13 | ✅ |
+| PingFang SC 字体 | 系统 `/System/Library/...` | ✅ |
+| WeasyPrint | ❌ 缺少 `libgobject-2.0` 系统依赖 | 不可用 |
+
+### PDF 生成方案
+
+**推荐路线：Pandoc + XeLaTeX**（理由：LaTeX 学术级排版，中文 + 表格控制力最强，PingFang 字体直接可用）
+
+备选路线：Markdown → HTML + CSS → Playwright → PDF（CSS 控制更灵活，但表格跨页和分页控制不如 LaTeX）
+
+### 具体执行步骤
+
+1. **写 Pandoc LaTeX 模板**（约 200 行）— 定义封面页、页眉页脚、章节标题样式、表格样式、代码块样式、Blockquote 样式
+   - 封面：深 Navy 底色 + 白色文字 + 左侧几何线条装饰（Agent 网络节点）
+   - 页眉：左侧"弈金 · 工行杯策划书"，右侧章节名
+   - 页脚：页码 `— {n} —` 格式
+   - 表格：深 Navy 表头白字 + 隔行浅蓝底 + 竖线隐藏
+   - 代码块/ASCII 图：暗 slate 背景 + 等宽字体（Menlo/Monaco）
+   - Blockquote：左侧 3px 紫色竖线
+   - 链接色：紫色 #6c5ce7
+
+2. **处理 ASCII 架构图**（4.2 节、1.2 节、用户流程图等）— 确保等宽字体 + 浅灰背景
+
+3. **处理 ✓ 和 ✗ 符号** — 策划书表格中有 ✅❌🟢🟡 等 emoji/symbol，确认 XeLaTeX 能渲染
+
+4. **生成 PDF**：`pandoc 策划书-弈金.md -o 策划书-弈金.pdf --pdf-engine=xelatex --template=yijin-template.tex`
+
+5. **调试迭代**：渲染 → 检查分页位置、表格完整性、中文字体 → 微调 LaTeX 参数
+
+6. **输出路径**：`docs/competition/策划书-弈金.pdf`
+
+### 已知会被挑战的点
+
+- 多列表格可能超 A4 宽度 → LaTeX 用 `tabularx` 或 `adjustbox` 缩放
+- ASCII 架构图可能跨页断裂 → 包在 `samepage` 或 `minipage` 中
+- emoji 符号需要字体支持 → 可能需 `Noto Emoji` 或改用文字替代
+- 封面几何装饰线用 LaTeX `tikz` 绘制
+
+### 参赛注意事项
+
+- 策划书中"省赛阶段"标注的功能为真实规划，答辩时可展开讲
+- 答辩重点演示 Commander 编排流程（实时进度最直观）
+- 避免在评委面前打印 PDF——多列表格会截断
