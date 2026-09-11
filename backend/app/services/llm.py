@@ -12,10 +12,13 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 
 def get_client() -> AsyncOpenAI:
     global _client
+    if not settings.deepseek_api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY 未设置，无法执行 AI 分析。请配置 .env 后重启后端。")
     if _client is None:
         _client = AsyncOpenAI(
             api_key=settings.deepseek_api_key,
             base_url=settings.deepseek_base_url,
+            timeout=settings.llm_request_timeout_seconds,
         )
     return _client
 

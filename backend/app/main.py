@@ -10,8 +10,6 @@ from app.core.config import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.validate_runtime_config()
-    if not settings.deepseek_api_key:
-        raise ValueError("DEEPSEEK_API_KEY 未设置！请在 .env 文件中配置")
     await init_db()
     yield
 

@@ -251,6 +251,16 @@ async def run_orchestrated_analysis_sse(
       error        — 出错 {message}
     """
     task_id = str(uuid.uuid4())
+    task = Task(
+        id=task_id,
+        user_id=user_id,
+        agent_name="commander",
+        title=title,
+        input_data=user_input,
+        status=TaskStatus.RUNNING,
+    )
+    db.add(task)
+    await _commit_with_retry(db)
 
     try:
         # ═══ Phase 1: Commander 规划 ═══
@@ -368,22 +378,15 @@ async def run_orchestrated_analysis_sse(
                 all_search_refs.extend(sr)
         search_refs_json = json.dumps(all_search_refs, ensure_ascii=False) if all_search_refs else None
 
-        task = Task(
-            id=task_id,
-            user_id=user_id,
-            agent_name="commander",
-            title=title,
-            input_data=json.dumps({
-                "user_input": user_input,
-                "plan": plan,
-                "subtask_results": results,
-            }, ensure_ascii=False),
-            output_data=final_output,
-            search_references=search_refs_json,
-            status=TaskStatus.COMPLETED,
-            completed_at=datetime.now(timezone.utc),
-        )
-        db.add(task)
+        task.input_data = json.dumps({
+            "user_input": user_input,
+            "plan": plan,
+            "subtask_results": results,
+        }, ensure_ascii=False)
+        task.output_data = final_output
+        task.search_references = search_refs_json
+        task.status = TaskStatus.COMPLETED
+        task.completed_at = datetime.now(timezone.utc)
         await _commit_with_retry(db)
 
         yield {
@@ -396,19 +399,11 @@ async def run_orchestrated_analysis_sse(
         }
 
     except Exception as e:
-        # 异常：保存 failed Task，yield error
+        # 异常：更新 failed Task，yield error
         try:
-            task = Task(
-                id=task_id,
-                user_id=user_id,
-                agent_name="commander",
-                title=title,
-                input_data=user_input,
-                status=TaskStatus.FAILED,
-                error_message=str(e),
-                completed_at=datetime.now(timezone.utc),
-            )
-            db.add(task)
+            task.status = TaskStatus.FAILED
+            task.error_message = str(e)
+            task.completed_at = datetime.now(timezone.utc)
             await _commit_with_retry(db)
         except Exception:
             pass

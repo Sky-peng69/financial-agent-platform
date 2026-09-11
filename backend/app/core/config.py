@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     debug: bool = True
     storage_path: str = "./storage"
     max_upload_size_mb: int = 20
+    llm_request_timeout_seconds: int = 60
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
