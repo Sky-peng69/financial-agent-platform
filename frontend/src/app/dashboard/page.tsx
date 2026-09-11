@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import SearchReferences from "@/components/SearchReferences";
-import { agents as agentsApi, tasks as tasksApi, type Agent, type Task, type SearchReference, parseSearchReferences } from "@/lib/api";
+import { agents as agentsApi, files as filesApi, tasks as tasksApi, type Agent, type ResearchFile, type Task, type SearchReference, parseSearchReferences } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -33,6 +33,11 @@ const SUGGESTED_PROMPTS = [
   "当前宏观经济形势研判及对A股市场影响",
 ];
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 interface AgentProgress {
   agent: string;
   displayName: string;
@@ -45,7 +50,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [researchFiles, setResearchFiles] = useState<ResearchFile[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileError, setFileError] = useState("");
+  const [fileMessage, setFileMessage] = useState("");
 
   // Commander analyze state
   const [analyzeInput, setAnalyzeInput] = useState("");
@@ -80,11 +89,42 @@ export default function DashboardPage() {
     Promise.all([
       agentsApi.list(),
       tasksApi.list(),
-    ]).then(([a, t]) => {
+      filesApi.list(),
+    ]).then(([a, t, f]) => {
       setAgents(a);
       setTasks(t);
+      setResearchFiles(f);
     }).catch(console.error).finally(() => setLoadingData(false));
   }, [user, loading, router]);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setFileError("");
+    setFileMessage("");
+
+    if (file.type && file.type !== "application/pdf") {
+      setFileError("当前仅支持 PDF 文件");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setFileError("当前仅支持 PDF 文件");
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const uploaded = await filesApi.upload(file);
+      setResearchFiles((items) => [uploaded, ...items.filter((item) => item.id !== uploaded.id)]);
+      setFileMessage("PDF 已上传并解析完成");
+    } catch (err: any) {
+      setFileError(err.message || "文件上传失败");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
 
   function resetAnalysis() {
     abortRef.current?.abort();
@@ -196,8 +236,88 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* ======== Commander 智能分析入口 ======== */}
+      {/* PDF 材料 */}
       <section className="mb-12 animate-fade-up stagger-1">
+        <div className="card p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+            <div>
+              <p className="text-[#9CA3AF] text-xs mb-1 tracking-widest uppercase">Research Files</p>
+              <h2 className="text-[#111827] text-lg font-semibold">研究材料</h2>
+            </div>
+            <label className="btn-secondary cursor-pointer inline-flex items-center justify-center gap-2 text-sm">
+              {uploadingFile ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-[#6B7280]/20 border-t-[#6B7280] rounded-full animate-spin" />
+                  解析中...
+                </>
+              ) : (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  上传 PDF
+                </>
+              )}
+              <input
+                className="hidden"
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={uploadingFile}
+                onChange={handleFileUpload}
+              />
+            </label>
+          </div>
+
+          {fileError && (
+            <div className="bg-[#FEF2F2] border border-[#DC2626]/20 text-[#DC2626] text-sm px-4 py-3 rounded-lg mb-4">
+              {fileError}
+            </div>
+          )}
+          {fileMessage && (
+            <div className="bg-[#ECFDF5] border border-[#059669]/20 text-[#059669] text-sm px-4 py-3 rounded-lg mb-4">
+              {fileMessage}
+            </div>
+          )}
+
+          {researchFiles.length === 0 ? (
+            <div className="bg-[#F8F9FB] border border-dashed border-[#D1D5DB] rounded-lg px-5 py-6 text-center">
+              <p className="text-[#6B7280] text-sm">暂无 PDF 材料</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {researchFiles.slice(0, 5).map((file) => (
+                <div
+                  key={file.id}
+                  className="flex items-center justify-between gap-4 bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[#111827] text-sm font-medium truncate">{file.original_name}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="text-[#9CA3AF] text-xs">{formatBytes(file.size_bytes)}</span>
+                      <span className="text-[#D1D5DB]">·</span>
+                      <span className="text-[#9CA3AF] text-xs">
+                        {new Date(file.created_at).toLocaleDateString("zh-CN")}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${
+                      file.status === "parsed"
+                        ? "bg-[#ECFDF5] text-[#059669]"
+                        : file.status === "failed"
+                        ? "bg-[#FEF2F2] text-[#DC2626]"
+                        : "bg-[#F1F3F5] text-[#6B7280]"
+                    }`}
+                  >
+                    {file.status === "parsed" ? "已解析" : file.status === "failed" ? "失败" : "已上传"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ======== Commander 智能分析入口 ======== */}
+      <section className="mb-12 animate-fade-up stagger-2">
         <div className="card relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#2563EB]" />
 

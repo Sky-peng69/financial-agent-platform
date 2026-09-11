@@ -13,6 +13,18 @@ function token(): string | null {
   return localStorage.getItem("token");
 }
 
+async function parseError(res: Response): Promise<string> {
+  let detail = res.statusText;
+  try {
+    const body = await res.json();
+    detail = body.detail || res.statusText;
+  } catch {
+    const text = await res.text();
+    if (text) detail = text.slice(0, 200);
+  }
+  return detail;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -43,14 +55,7 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body.detail || res.statusText;
-    } catch {
-      const text = await res.text();
-      if (text) detail = text.slice(0, 200);
-    }
+    const detail = await parseError(res);
     throw new ApiError(detail, res.status);
   }
   return res.json();
@@ -328,6 +333,53 @@ export interface Task {
 export const tasks = {
   list: () => request<Task[]>("/api/tasks"),
   get: (id: string) => request<Task>(`/api/tasks/${id}`),
+};
+
+export interface ResearchFile {
+  id: string;
+  task_id: string | null;
+  original_name: string;
+  content_type: string;
+  size_bytes: number;
+  status: "uploaded" | "parsed" | "failed";
+  created_at: string;
+}
+
+export const files = {
+  list: () => request<ResearchFile[]>("/api/files"),
+  upload: async (file: File, taskId?: string | null) => {
+    const t = token();
+    const body = new FormData();
+    body.append("file", file);
+    if (taskId) body.append("task_id", taskId);
+
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/api/files`, {
+        method: "POST",
+        headers: {
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        },
+        body,
+      });
+    } catch {
+      throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        window.location.replace("/login");
+      }
+      throw new ApiError("认证已过期，请重新登录", res.status);
+    }
+
+    if (!res.ok) {
+      throw new ApiError(await parseError(res), res.status);
+    }
+
+    return res.json() as Promise<ResearchFile>;
+  },
 };
 
 export interface User {
