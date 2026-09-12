@@ -398,6 +398,14 @@ export interface ResearchSubject {
   updated_at: string;
 }
 
+export interface EvidenceSnippet {
+  id: string;
+  file_id: string;
+  page_number: number | null;
+  location_label: string;
+  text: string;
+}
+
 export interface ResearchClaim {
   id: string;
   research_subject_id: string;
@@ -406,6 +414,9 @@ export interface ResearchClaim {
   confidence_level: string;
   evidence_strength: string;
   status: string;
+  evidence_ids: string[];
+  verification_status: string;
+  evidence_items: EvidenceSnippet[];
   created_at: string;
   updated_at: string;
 }
@@ -417,6 +428,9 @@ export interface ResearchAssumption {
   category: string;
   confidence_level: string;
   status: string;
+  evidence_ids: string[];
+  verification_status: string;
+  evidence_items: EvidenceSnippet[];
   created_at: string;
   updated_at: string;
 }

@@ -92,6 +92,16 @@ class DocumentEvidenceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvidenceSnippetResponse(BaseModel):
+    id: str
+    file_id: str
+    page_number: int | None = None
+    location_label: str
+    text: str
+
+    model_config = {"from_attributes": True}
+
+
 class ResearchSubjectCreate(BaseModel):
     company_name: str = Field(min_length=1, max_length=200)
     ticker: str | None = Field(default=None, max_length=50)
@@ -133,6 +143,9 @@ class ResearchClaimResponse(BaseModel):
     confidence_level: str
     evidence_strength: str
     status: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    verification_status: str = "needs_review"
+    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -153,6 +166,9 @@ class ResearchAssumptionResponse(BaseModel):
     category: str
     confidence_level: str
     status: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    verification_status: str = "needs_review"
+    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

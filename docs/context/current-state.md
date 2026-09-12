@@ -18,6 +18,7 @@
 - `docs/superpowers/specs/2026-09-12-research-judgment-workbench-design.md`
 - `backend/app/models/__init__.py`
 - `backend/app/api/research_subjects.py`
+- `backend/app/services/research_asset_generator.py`
 - `frontend/src/app/dashboard/research/page.tsx`
 - `frontend/src/app/dashboard/research/[id]/page.tsx`
 
@@ -36,7 +37,9 @@
 - PDF 上传可以归档到公司研究对象，页码级证据会关联到该对象。
 - 公司研究驾驶舱新增“生成判断资产”入口，可把研究材料转成判断、假设、反方挑战和决策备忘录。
 - 新增 `/api/research-subjects/{id}/generate-assets`，生成结果直接写入公司研究对象。
+- 判断和假设新增证据 ID 关联与核验状态，可在驾驶舱折叠展开查看对应页码/片段。
+- 后端返回 `cited / needs_review / insufficient` 三类核验状态，前端显示为“已引用 / 待核验 / 证据不足”。
 
 ## Notes
 
-当前生成入口已经完成编译、构建、接口路由和浏览器渲染验证；本轮未消耗真实模型调用验证完整材料生成质量。
+当前生成入口和证据引用展示已经完成编译、构建、接口级验证和浏览器渲染验证；本轮未消耗真实模型调用验证完整材料生成质量。

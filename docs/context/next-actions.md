@@ -2,24 +2,23 @@
 
 ## Unique Next Action
 
-为自动生成的判断资产补充显式证据引用关系和核验状态。
+为判断资产增加人工复核动作：确认、驳回和编辑。
 
 ## Why This Is Next
 
-当前生成入口已经可以把材料分析结果写入 `Claim`、`Assumption`、`Challenge`、`DecisionMemo`。下一步要把每条判断和假设绑定到具体 `DocumentEvidence`，否则用户只能看到结论，不能快速复核“这条判断到底来自哪里”。
+当前判断和假设已经能关联具体证据片段，并在驾驶舱中折叠展示。下一步要让投研人员对这些资产进行复核动作，否则系统只能“生成和展示”，还不能形成真实研究工作流中的判断版本沉淀。
 
 ## Inputs Needed
 
 - `backend/app/api/research_subjects.py`
 - `backend/app/models/__init__.py`
-- `backend/app/services/research_asset_generator.py`
 - `frontend/src/app/dashboard/research/[id]/page.tsx`
 
 ## Stop Condition
 
-- 每条自动生成的核心判断至少能关联 1 个 `DocumentEvidence`。
-- 驾驶舱可以让用户展开查看对应页码/片段，而不是暴露在主界面里。
-- 后端返回资产时包含核验状态：已引用、待核验或证据不足。
+- 用户可以把某条判断或假设标记为“已确认”。
+- 用户可以把某条判断或假设标记为“已驳回”并保留原因。
+- 用户可以编辑判断或假设文本，保存后仍保留原有证据引用。
 
 ## Before Continuing Checklist
 

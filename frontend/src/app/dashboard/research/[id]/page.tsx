@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   files as filesApi,
   researchSubjects,
+  type EvidenceSnippet,
   type ResearchSubjectWorkspace,
 } from "@/lib/api";
 
@@ -20,6 +21,12 @@ const DIRECTION_LABELS: Record<string, string> = {
   negative: "负面",
 };
 
+const VERIFICATION_LABELS: Record<string, string> = {
+  cited: "已引用",
+  needs_review: "待核验",
+  insufficient: "证据不足",
+};
+
 function levelLabel(value: string | null | undefined) {
   if (!value) return "未定";
   return LEVEL_LABELS[value] || value;
@@ -27,6 +34,10 @@ function levelLabel(value: string | null | undefined) {
 
 function directionLabel(value: string) {
   return DIRECTION_LABELS[value] || value;
+}
+
+function verificationLabel(value: string) {
+  return VERIFICATION_LABELS[value] || value;
 }
 
 function formatDate(value: string) {
@@ -38,6 +49,43 @@ function EmptyLine({ text }: { text: string }) {
     <div className="border border-dashed border-[#D1D5DB] rounded-lg px-4 py-5 text-center">
       <p className="text-[#9CA3AF] text-sm">{text}</p>
     </div>
+  );
+}
+
+function EvidenceDetails({
+  evidenceItems,
+  verificationStatus,
+}: {
+  evidenceItems: EvidenceSnippet[];
+  verificationStatus: string;
+}) {
+  if (evidenceItems.length === 0) {
+    return (
+      <p className="text-[#9CA3AF] text-xs mt-2">
+        {verificationLabel(verificationStatus)}
+      </p>
+    );
+  }
+
+  return (
+    <details className="mt-3 border-t border-[#F1F3F5] pt-3 group">
+      <summary className="cursor-pointer list-none text-[#2563EB] text-xs font-medium">
+        {verificationLabel(verificationStatus)} · 查看证据 {evidenceItems.length}
+      </summary>
+      <div className="space-y-2 mt-3">
+        {evidenceItems.map((item) => (
+          <div key={item.id} className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-3 py-2">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <span className="text-[#111827] text-xs font-medium">{item.location_label}</span>
+              {item.page_number && (
+                <span className="text-[#9CA3AF] text-[11px]">第 {item.page_number} 页</span>
+              )}
+            </div>
+            <p className="text-[#6B7280] text-xs leading-relaxed line-clamp-4">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -297,8 +345,15 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
                       <span className="badge-info">{directionLabel(claim.direction)}</span>
                       <span className="badge-neutral">置信度 {levelLabel(claim.confidence_level)}</span>
                       <span className="badge-neutral">证据 {levelLabel(claim.evidence_strength)}</span>
+                      <span className={claim.verification_status === "cited" ? "badge-info" : "badge-neutral"}>
+                        {verificationLabel(claim.verification_status)}
+                      </span>
                     </div>
                     <p className="text-[#111827] text-sm leading-relaxed">{claim.content}</p>
+                    <EvidenceDetails
+                      evidenceItems={claim.evidence_items}
+                      verificationStatus={claim.verification_status}
+                    />
                     <p className="text-[#9CA3AF] text-xs mt-2">{formatDate(claim.updated_at)}</p>
                   </div>
                 ))}
@@ -320,8 +375,15 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
                     <div className="flex items-center gap-2 mb-2">
                       <span className="badge-neutral">{assumption.category}</span>
                       <span className="badge-info">置信度 {levelLabel(assumption.confidence_level)}</span>
+                      <span className={assumption.verification_status === "cited" ? "badge-info" : "badge-neutral"}>
+                        {verificationLabel(assumption.verification_status)}
+                      </span>
                     </div>
                     <p className="text-[#111827] text-sm leading-relaxed">{assumption.content}</p>
+                    <EvidenceDetails
+                      evidenceItems={assumption.evidence_items}
+                      verificationStatus={assumption.verification_status}
+                    />
                   </div>
                 ))}
               </div>

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,7 @@ from app.models import (
 from app.schemas import (
     DecisionMemoCreate,
     DecisionMemoResponse,
+    EvidenceSnippetResponse,
     ResearchAssumptionCreate,
     ResearchAssumptionResponse,
     ResearchChallengeCreate,
@@ -42,6 +44,101 @@ async def _get_subject_for_user(
     if not subject or subject.user_id != user.id:
         raise HTTPException(status_code=404, detail="研究对象不存在")
     return subject
+
+
+def _parse_evidence_ids(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, str)]
+
+
+def _evidence_items_for_asset(
+    raw: str | None,
+    evidence_by_id: dict[str, DocumentEvidence],
+) -> tuple[list[str], list[EvidenceSnippetResponse]]:
+    evidence_ids = _parse_evidence_ids(raw)
+    evidence_items = [
+        EvidenceSnippetResponse.model_validate(evidence_by_id[evidence_id])
+        for evidence_id in evidence_ids
+        if evidence_id in evidence_by_id
+    ]
+    return evidence_ids, evidence_items
+
+
+def _claim_response(
+    claim: ResearchClaim,
+    evidence_by_id: dict[str, DocumentEvidence],
+) -> ResearchClaimResponse:
+    evidence_ids, evidence_items = _evidence_items_for_asset(claim.evidence_ids, evidence_by_id)
+    return ResearchClaimResponse(
+        id=claim.id,
+        research_subject_id=claim.research_subject_id,
+        content=claim.content,
+        direction=claim.direction,
+        confidence_level=claim.confidence_level,
+        evidence_strength=claim.evidence_strength,
+        status=claim.status,
+        evidence_ids=evidence_ids,
+        verification_status=claim.verification_status or "needs_review",
+        evidence_items=evidence_items,
+        created_at=claim.created_at,
+        updated_at=claim.updated_at,
+    )
+
+
+def _assumption_response(
+    assumption: ResearchAssumption,
+    evidence_by_id: dict[str, DocumentEvidence],
+) -> ResearchAssumptionResponse:
+    evidence_ids, evidence_items = _evidence_items_for_asset(
+        assumption.evidence_ids,
+        evidence_by_id,
+    )
+    return ResearchAssumptionResponse(
+        id=assumption.id,
+        research_subject_id=assumption.research_subject_id,
+        content=assumption.content,
+        category=assumption.category,
+        confidence_level=assumption.confidence_level,
+        status=assumption.status,
+        evidence_ids=evidence_ids,
+        verification_status=assumption.verification_status or "needs_review",
+        evidence_items=evidence_items,
+        created_at=assumption.created_at,
+        updated_at=assumption.updated_at,
+    )
+
+
+def _asset_evidence_ids(
+    indexes: list[int],
+    evidence_items: list[DocumentEvidence],
+) -> list[str]:
+    evidence_ids: list[str] = []
+    for index in indexes:
+        if 1 <= index <= len(evidence_items):
+            evidence_id = evidence_items[index - 1].id
+            if evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+    return evidence_ids
+
+
+def _asset_verification(
+    indexes: list[int],
+    evidence_items: list[DocumentEvidence],
+    model_status: str,
+) -> tuple[list[str], str]:
+    evidence_ids = _asset_evidence_ids(indexes, evidence_items)
+    if evidence_ids:
+        return evidence_ids, model_status
+    if evidence_items:
+        return [evidence_items[0].id], "needs_review"
+    return [], "insufficient"
 
 
 async def _build_workspace_response(
@@ -78,12 +175,21 @@ async def _build_workspace_response(
         .where(DocumentEvidence.research_subject_id == subject.id)
         .where(DocumentEvidence.user_id == user.id)
     )
+    evidence_result = await db.execute(
+        select(DocumentEvidence)
+        .where(DocumentEvidence.research_subject_id == subject.id)
+        .where(DocumentEvidence.user_id == user.id)
+    )
+    evidence_by_id = {item.id: item for item in evidence_result.scalars().all()}
 
     return ResearchSubjectWorkspaceResponse(
         subject=ResearchSubjectResponse.model_validate(subject),
-        claims=[ResearchClaimResponse.model_validate(item) for item in claims_result.scalars().all()],
+        claims=[
+            _claim_response(item, evidence_by_id)
+            for item in claims_result.scalars().all()
+        ],
         assumptions=[
-            ResearchAssumptionResponse.model_validate(item)
+            _assumption_response(item, evidence_by_id)
             for item in assumptions_result.scalars().all()
         ],
         challenges=[
@@ -181,6 +287,11 @@ async def generate_subject_assets(
         raise HTTPException(status_code=502, detail="生成结果未达到结构化要求，请重试") from exc
 
     for item in assets["claims"]:
+        evidence_ids, verification_status = _asset_verification(
+            item["evidence_indexes"],
+            evidence_items,
+            item["verification_status"],
+        )
         db.add(ResearchClaim(
             research_subject_id=subject.id,
             user_id=user.id,
@@ -189,9 +300,16 @@ async def generate_subject_assets(
             confidence_level=item["confidence_level"],
             evidence_strength=item["evidence_strength"],
             status=item["status"],
+            evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+            verification_status=verification_status,
         ))
 
     for item in assets["assumptions"]:
+        evidence_ids, verification_status = _asset_verification(
+            item["evidence_indexes"],
+            evidence_items,
+            item["verification_status"],
+        )
         db.add(ResearchAssumption(
             research_subject_id=subject.id,
             user_id=user.id,
@@ -199,6 +317,8 @@ async def generate_subject_assets(
             category=item["category"],
             confidence_level=item["confidence_level"],
             status=item["status"],
+            evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+            verification_status=verification_status,
         ))
 
     for item in assets["challenges"]:

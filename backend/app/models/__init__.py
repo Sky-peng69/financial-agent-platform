@@ -159,6 +159,8 @@ class ResearchClaim(Base):
     confidence_level: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     evidence_strength: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="needs_review")
+    evidence_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="needs_review")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -179,6 +181,8 @@ class ResearchAssumption(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="business")
     confidence_level: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    evidence_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="needs_review")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

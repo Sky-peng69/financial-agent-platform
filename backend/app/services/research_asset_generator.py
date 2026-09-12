@@ -33,6 +33,16 @@ def _enum_value(value: Any, allowed: set[str], default: str) -> str:
     return default
 
 
+def _evidence_indexes(value: Any, evidence_count: int) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    indexes: list[int] = []
+    for item in value[:3]:
+        if isinstance(item, int) and 1 <= item <= evidence_count and item not in indexes:
+            indexes.append(item)
+    return indexes
+
+
 def extract_json_object(content: str) -> dict[str, Any]:
     json_text = content.strip()
     if json_text.startswith("```"):
@@ -46,18 +56,24 @@ def extract_json_object(content: str) -> dict[str, Any]:
     return json.loads(json_text[start:end + 1])
 
 
-def normalize_research_assets(payload: dict[str, Any]) -> dict[str, Any]:
+def normalize_research_assets(
+    payload: dict[str, Any],
+    evidence_count: int = MAX_EVIDENCE_ITEMS,
+) -> dict[str, Any]:
     claims = []
     for item in payload.get("claims", [])[:3]:
         content = _clean_text(item.get("content"))
         if not content:
             continue
+        indexes = _evidence_indexes(item.get("evidence_indexes"), evidence_count)
         claims.append({
             "content": content,
             "direction": _enum_value(item.get("direction"), ALLOWED_DIRECTIONS, "neutral"),
             "confidence_level": _enum_value(item.get("confidence_level"), ALLOWED_LEVELS, "medium"),
             "evidence_strength": _enum_value(item.get("evidence_strength"), ALLOWED_LEVELS, "medium"),
             "status": "needs_review",
+            "evidence_indexes": indexes,
+            "verification_status": "cited" if indexes else "needs_review",
         })
 
     assumptions = []
@@ -65,11 +81,14 @@ def normalize_research_assets(payload: dict[str, Any]) -> dict[str, Any]:
         content = _clean_text(item.get("content"))
         if not content:
             continue
+        indexes = _evidence_indexes(item.get("evidence_indexes"), evidence_count)
         assumptions.append({
             "content": content,
             "category": _enum_value(item.get("category"), ALLOWED_CATEGORIES, "business"),
             "confidence_level": _enum_value(item.get("confidence_level"), ALLOWED_LEVELS, "medium"),
             "status": "active",
+            "evidence_indexes": indexes,
+            "verification_status": "cited" if indexes else "needs_review",
         })
 
     challenges = []
@@ -106,11 +125,11 @@ def normalize_research_assets(payload: dict[str, Any]) -> dict[str, Any]:
 def _build_evidence_context(evidence_items: list[DocumentEvidence]) -> str:
     blocks: list[str] = []
     remaining = MAX_EVIDENCE_CHARS
-    for item in evidence_items[:MAX_EVIDENCE_ITEMS]:
+    for index, item in enumerate(evidence_items[:MAX_EVIDENCE_ITEMS], start=1):
         text = item.text.strip()
         if not text:
             continue
-        block = f"【{item.location_label}】\n{text}"
+        block = f"【E{index}｜{item.location_label}】\n{text}"
         excerpt = block[:remaining]
         blocks.append(excerpt)
         remaining -= len(excerpt)
@@ -131,6 +150,7 @@ async def generate_research_assets(
 你的任务不是写一篇报告，而是把材料沉淀成可复核的研究判断资产。
 
 只允许根据用户提供的材料和研究对象信息输出；证据不足时降低置信度，不要编造数字、事实或来源。
+每条判断和假设都要用 evidence_indexes 标出对应的 E 编号；找不到直接证据时可以留空。
 必须只输出 JSON，不要使用 Markdown，不要解释处理过程。"""
 
     user_prompt = f"""请基于以下研究对象和材料片段，生成结构化判断资产。
@@ -151,14 +171,16 @@ async def generate_research_assets(
       "content": "一句完整、可被反驳的核心判断",
       "direction": "positive|neutral|negative",
       "confidence_level": "high|medium|low",
-      "evidence_strength": "high|medium|low"
+      "evidence_strength": "high|medium|low",
+      "evidence_indexes": [1]
     }}
   ],
   "assumptions": [
     {{
       "content": "支撑判断成立的关键假设",
       "category": "revenue|margin|cashflow|valuation|policy|competition|business|risk",
-      "confidence_level": "high|medium|low"
+      "confidence_level": "high|medium|low",
+      "evidence_indexes": [1]
     }}
   ],
   "challenges": [
@@ -181,4 +203,4 @@ async def generate_research_assets(
         enable_search=False,
         system_prompt=system_prompt,
     )
-    return normalize_research_assets(extract_json_object(content))
+    return normalize_research_assets(extract_json_object(content), len(evidence_items))
