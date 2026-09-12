@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import (
@@ -17,10 +18,13 @@ from app.agents.registry import (
     build_commander_system_prompt,
     get_specialist_prompt,
 )
-from app.models import Task, TaskStatus
+from app.models import FileStatus, ResearchFile, Task, TaskStatus
 from app.services.llm import chat
 
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
+MAX_ATTACHMENT_FILES = 3
+MAX_ATTACHMENT_CHARS_PER_FILE = 4000
+MAX_ATTACHMENT_CHARS_TOTAL = 10000
 
 
 async def _commit_with_retry(db: AsyncSession, max_retries: int = 3) -> None:
@@ -40,6 +44,48 @@ def _agent_display_name(agent_name: str) -> str:
     """获取 Agent 的中文显示名"""
     info = AGENTS_BY_NAME.get(agent_name)
     return info.display_name if info else agent_name
+
+
+async def _build_recent_file_context(db: AsyncSession, user_id: str) -> str:
+    """将用户最近上传的已解析材料作为隐式上下文，模拟对话附件体验。"""
+    result = await db.execute(
+        select(ResearchFile)
+        .where(ResearchFile.user_id == user_id)
+        .where(ResearchFile.status == FileStatus.PARSED)
+        .order_by(desc(ResearchFile.created_at))
+        .limit(MAX_ATTACHMENT_FILES)
+    )
+    files = result.scalars().all()
+    if not files:
+        return ""
+
+    blocks: list[str] = []
+    remaining = MAX_ATTACHMENT_CHARS_TOTAL
+    for item in files:
+        text = (item.extracted_text or "").strip()
+        if not text:
+            continue
+        excerpt = text[: min(MAX_ATTACHMENT_CHARS_PER_FILE, remaining)]
+        remaining -= len(excerpt)
+        blocks.append(f"### {item.original_name}\n{excerpt}")
+        if remaining <= 0:
+            break
+
+    if not blocks:
+        return ""
+
+    return (
+        "## 已上传材料上下文\n"
+        "以下内容来自用户已上传并解析的研究材料。请像阅读用户随问题附上的材料一样使用它们，"
+        "不要暴露内部处理过程；涉及材料依据时可自然提及文件名或页码。\n\n"
+        + "\n\n".join(blocks)
+    )
+
+
+def _with_file_context(user_input: str, file_context: str) -> str:
+    if not file_context:
+        return user_input
+    return f"{user_input}\n\n---\n\n{file_context}"
 
 
 # ============================================================
@@ -139,9 +185,13 @@ async def run_orchestrated_analysis(
     db: AsyncSession,
 ) -> Task:
     """百炼模式：Commander 规划 → 并行执行 → 汇总报告"""
+    analysis_input = _with_file_context(
+        user_input,
+        await _build_recent_file_context(db, user_id),
+    )
 
     # Phase 1: Commander 规划
-    plan = await plan_analysis(user_input)
+    plan = await plan_analysis(analysis_input)
     subtasks = plan.get("subtasks", [])
 
     # Phase 2: 并行执行所有 Specialist（不含 report-synthesizer）
@@ -188,7 +238,7 @@ async def run_orchestrated_analysis(
         )
         final_prompt = f"""汇总指令：{synthesis_instruction}
 
-原始用户请求：{user_input}
+原始用户请求：{analysis_input}
 
 以下各专家的分析结果：
 
@@ -263,6 +313,11 @@ async def run_orchestrated_analysis_sse(
     await _commit_with_retry(db)
 
     try:
+        analysis_input = _with_file_context(
+            user_input,
+            await _build_recent_file_context(db, user_id),
+        )
+
         # ═══ Phase 1: Commander 规划 ═══
         yield {
             "type": "phase",
@@ -270,7 +325,7 @@ async def run_orchestrated_analysis_sse(
             "message": "AI Commander 正在理解问题、规划分析任务...",
         }
 
-        plan = await plan_analysis(user_input)
+        plan = await plan_analysis(analysis_input)
         subtasks = plan.get("subtasks", [])
 
         execution_tasks = [
@@ -358,7 +413,7 @@ async def run_orchestrated_analysis_sse(
             )
             final_prompt = f"""汇总指令：{synthesis_instruction}
 
-原始用户请求：{user_input}
+原始用户请求：{analysis_input}
 
 以下各专家的分析结果：
 
