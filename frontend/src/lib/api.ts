@@ -189,7 +189,7 @@ export const agents = {
   analyze: (title: string, inputData: string) =>
     request<Task>("/api/agents/analyze", {
       method: "POST",
-      body: JSON.stringify({ title, input_data: inputData, file_ids: [] }),
+      body: JSON.stringify({ title, input_data: inputData }),
       signal: AbortSignal.timeout(300_000), // 5 min
     }),
 
@@ -197,7 +197,6 @@ export const agents = {
   analyzeStream: (
     title: string,
     inputData: string,
-    fileIds: string[],
     callbacks: {
       onPhase: (phase: string, message: string) => void;
       onPlan: (plan: any) => void;
@@ -229,7 +228,7 @@ export const agents = {
             "Content-Type": "application/json",
             ...(t ? { Authorization: `Bearer ${t}` } : {}),
           },
-          body: JSON.stringify({ title, input_data: inputData, file_ids: fileIds }),
+          body: JSON.stringify({ title, input_data: inputData }),
           signal: controller.signal,
         });
 

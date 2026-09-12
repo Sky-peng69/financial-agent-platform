@@ -55,7 +55,6 @@ export default function DashboardPage() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [fileError, setFileError] = useState("");
   const [fileMessage, setFileMessage] = useState("");
-  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
 
   // Commander analyze state
   const [analyzeInput, setAnalyzeInput] = useState("");
@@ -119,19 +118,12 @@ export default function DashboardPage() {
     try {
       const uploaded = await filesApi.upload(file);
       setResearchFiles((items) => [uploaded, ...items.filter((item) => item.id !== uploaded.id)]);
-      setSelectedFileIds((ids) => [uploaded.id, ...ids.filter((id) => id !== uploaded.id)]);
       setFileMessage("PDF 已上传并解析完成");
     } catch (err: any) {
       setFileError(err.message || "文件上传失败");
     } finally {
       setUploadingFile(false);
     }
-  }
-
-  function toggleFileSelection(fileId: string) {
-    setSelectedFileIds((ids) =>
-      ids.includes(fileId) ? ids.filter((id) => id !== fileId) : [...ids, fileId]
-    );
   }
 
   function resetAnalysis() {
@@ -155,7 +147,6 @@ export default function DashboardPage() {
     abortRef.current = agentsApi.analyzeStream(
       analyzeInput.trim(),
       analyzeInput.trim(),
-      selectedFileIds,
       {
         onPhase: (phase, message) => {
           setAnalyzePhase(phase);
@@ -293,38 +284,18 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {researchFiles.slice(0, 5).map((file) => (
-                <button
-                  type="button"
+                <div
                   key={file.id}
-                  className={`w-full text-left flex items-center justify-between gap-4 border rounded-lg px-4 py-3 transition-all ${
-                    selectedFileIds.includes(file.id)
-                      ? "bg-[#EFF6FF] border-[#2563EB]/30"
-                      : "bg-[#F8F9FB] border-[#E5E7EB] hover:border-[#D1D5DB]"
-                  }`}
-                  onClick={() => toggleFileSelection(file.id)}
-                  disabled={file.status !== "parsed"}
+                  className="flex items-center justify-between gap-4 bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-4 py-3"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span
-                      className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                        selectedFileIds.includes(file.id)
-                          ? "bg-[#2563EB] border-[#2563EB] text-white"
-                          : "bg-white border-[#D1D5DB]"
-                      }`}
-                    >
-                      {selectedFileIds.includes(file.id) && (
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      )}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[#111827] text-sm font-medium truncate">{file.original_name}</p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span className="text-[#9CA3AF] text-xs">{formatBytes(file.size_bytes)}</span>
-                        <span className="text-[#D1D5DB]">·</span>
-                        <span className="text-[#9CA3AF] text-xs">
-                          {new Date(file.created_at).toLocaleDateString("zh-CN")}
-                        </span>
-                      </div>
+                  <div className="min-w-0">
+                    <p className="text-[#111827] text-sm font-medium truncate">{file.original_name}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="text-[#9CA3AF] text-xs">{formatBytes(file.size_bytes)}</span>
+                      <span className="text-[#D1D5DB]">·</span>
+                      <span className="text-[#9CA3AF] text-xs">
+                        {new Date(file.created_at).toLocaleDateString("zh-CN")}
+                      </span>
                     </div>
                   </div>
                   <span
@@ -338,7 +309,7 @@ export default function DashboardPage() {
                   >
                     {file.status === "parsed" ? "已解析" : file.status === "failed" ? "失败" : "已上传"}
                   </span>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -404,12 +375,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-            {selectedFileIds.length > 0 && (
-              <p className="text-[#6B7280] text-xs mt-3">
-                将使用 {selectedFileIds.length} 份已选研究材料参与分析
-              </p>
-            )}
-
             {/* ---- Loading state with real-time agent progress ---- */}
             {analyzeLoading && (
               <div className="mt-6 border-t border-[#E5E7EB] pt-6 animate-fade-in">

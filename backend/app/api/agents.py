@@ -95,7 +95,6 @@ async def analyze(
         user_input=data.input_data or data.title,
         title=data.title,
         user_id=user.id,
-        file_ids=data.file_ids,
         db=db,
     )
     return TaskResponse.model_validate(task)
@@ -120,7 +119,6 @@ async def analyze_stream(
             user_input=data.input_data or data.title,
             title=data.title,
             user_id=user.id,
-            file_ids=data.file_ids,
             db=db,
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
