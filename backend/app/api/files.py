@@ -18,6 +18,16 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 storage = LocalStorage(settings.storage_path)
 
 
+def _extract_pdf_text_by_page(content: bytes) -> str:
+    reader = PdfReader(io.BytesIO(content))
+    pages: list[str] = []
+    for index, page in enumerate(reader.pages, start=1):
+        page_text = (page.extract_text() or "").strip()
+        if page_text:
+            pages.append(f"【第 {index} 页】\n{page_text}")
+    return "\n\n".join(pages).strip()
+
+
 @router.post("", response_model=ResearchFileResponse)
 async def upload_file(
     file: UploadFile = File(...),
@@ -41,8 +51,7 @@ async def upload_file(
             raise HTTPException(status_code=404, detail="任务不存在")
 
     try:
-        reader = PdfReader(io.BytesIO(content))
-        extracted_text = "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        extracted_text = _extract_pdf_text_by_page(content)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"PDF 解析失败: {exc}") from exc
 

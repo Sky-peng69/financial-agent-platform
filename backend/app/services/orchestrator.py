@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import (
@@ -17,10 +18,13 @@ from app.agents.registry import (
     build_commander_system_prompt,
     get_specialist_prompt,
 )
-from app.models import Task, TaskStatus
+from app.models import ResearchFile, Task, TaskStatus
 from app.services.llm import chat
 
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
+MAX_CONTEXT_FILES = 5
+MAX_CONTEXT_CHARS_PER_FILE = 5000
+MAX_CONTEXT_CHARS_TOTAL = 15000
 
 
 async def _commit_with_retry(db: AsyncSession, max_retries: int = 3) -> None:
@@ -40,6 +44,64 @@ def _agent_display_name(agent_name: str) -> str:
     """获取 Agent 的中文显示名"""
     info = AGENTS_BY_NAME.get(agent_name)
     return info.display_name if info else agent_name
+
+
+async def _build_file_context(
+    db: AsyncSession,
+    user_id: str,
+    file_ids: list[str] | None,
+) -> tuple[str, list[dict[str, str]]]:
+    """读取用户选中的已解析文件，构造可注入模型的材料片段。"""
+    if not file_ids:
+        return "", []
+
+    unique_ids = list(dict.fromkeys(file_ids))[:MAX_CONTEXT_FILES]
+    result = await db.execute(
+        select(ResearchFile)
+        .where(ResearchFile.user_id == user_id)
+        .where(ResearchFile.id.in_(unique_ids))
+    )
+    files_by_id = {item.id: item for item in result.scalars().all()}
+
+    missing_ids = [file_id for file_id in unique_ids if file_id not in files_by_id]
+    if missing_ids:
+        raise ValueError("存在不可访问或不存在的研究材料")
+
+    blocks: list[str] = []
+    references: list[dict[str, str]] = []
+    remaining = MAX_CONTEXT_CHARS_TOTAL
+    for file_id in unique_ids:
+        item = files_by_id[file_id]
+        text = (item.extracted_text or "").strip()
+        if not text:
+            continue
+        excerpt = text[: min(MAX_CONTEXT_CHARS_PER_FILE, remaining)]
+        remaining -= len(excerpt)
+        blocks.append(f"### 文件：{item.original_name}\n文件ID：{item.id}\n\n{excerpt}")
+        references.append({
+            "name": item.original_name,
+            "snippet": excerpt[:200],
+        })
+        if remaining <= 0:
+            break
+
+    if not blocks:
+        return "", references
+
+    context = "\n\n".join(blocks)
+    return (
+        "## 用户上传研究材料\n"
+        "以下内容来自用户上传文件，页码标记如【第 N 页】。"
+        "分析时必须区分上传材料、公开检索和模型判断；引用上传材料时注明文件名和页码。\n\n"
+        f"{context}",
+        references,
+    )
+
+
+def _merge_user_input_with_file_context(user_input: str, file_context: str) -> str:
+    if not file_context:
+        return user_input
+    return f"{user_input}\n\n---\n\n{file_context}"
 
 
 # ============================================================
@@ -136,12 +198,15 @@ async def run_orchestrated_analysis(
     user_input: str,
     title: str,
     user_id: str,
+    file_ids: list[str] | None,
     db: AsyncSession,
 ) -> Task:
     """百炼模式：Commander 规划 → 并行执行 → 汇总报告"""
+    file_context, file_references = await _build_file_context(db, user_id, file_ids)
+    analysis_input = _merge_user_input_with_file_context(user_input, file_context)
 
     # Phase 1: Commander 规划
-    plan = await plan_analysis(user_input)
+    plan = await plan_analysis(analysis_input)
     subtasks = plan.get("subtasks", [])
 
     # Phase 2: 并行执行所有 Specialist（不含 report-synthesizer）
@@ -188,7 +253,7 @@ async def run_orchestrated_analysis(
         )
         final_prompt = f"""汇总指令：{synthesis_instruction}
 
-原始用户请求：{user_input}
+原始用户请求：{analysis_input}
 
 以下各专家的分析结果：
 
@@ -201,7 +266,7 @@ async def run_orchestrated_analysis(
 
     # Phase 4: 保存到数据库
     # 收集所有 Specialist 的搜索引用
-    all_search_refs = []
+    all_search_refs = [*file_references]
     for r in results:
         sr = r.get("search_results")
         if sr and isinstance(sr, list):
@@ -215,6 +280,7 @@ async def run_orchestrated_analysis(
         title=title,
         input_data=json.dumps({
             "user_input": user_input,
+            "file_ids": file_ids or [],
             "plan": plan,
             "subtask_results": results,
         }, ensure_ascii=False),
@@ -237,6 +303,7 @@ async def run_orchestrated_analysis_sse(
     user_input: str,
     title: str,
     user_id: str,
+    file_ids: list[str] | None,
     db: AsyncSession,
 ) -> AsyncGenerator[dict, None]:
     """
@@ -263,14 +330,17 @@ async def run_orchestrated_analysis_sse(
     await _commit_with_retry(db)
 
     try:
+        file_context, file_references = await _build_file_context(db, user_id, file_ids)
+        analysis_input = _merge_user_input_with_file_context(user_input, file_context)
+
         # ═══ Phase 1: Commander 规划 ═══
         yield {
             "type": "phase",
             "phase": "planning",
-            "message": "AI Commander 正在理解问题、规划分析任务...",
+            "message": "AI Commander 正在理解问题、读取研究材料、规划分析任务...",
         }
 
-        plan = await plan_analysis(user_input)
+        plan = await plan_analysis(analysis_input)
         subtasks = plan.get("subtasks", [])
 
         execution_tasks = [
@@ -336,10 +406,7 @@ async def run_orchestrated_analysis_sse(
             final_output = "未能获取任何分析结果，请重试。"
         elif len(results) == 0 and synthesize_task:
             # 所有 subtask 都是 report-synthesizer，直接运行它
-            final_result = await run_specialist(
-                "report-synthesizer",
-                synthesize_task["prompt"],
-            )
+            final_result = await run_specialist("report-synthesizer", synthesize_task["prompt"])
             final_output = final_result["content"]
         elif len(results) == 1 and not synthesize_task:
             final_output = results[0]["content"]
@@ -358,7 +425,7 @@ async def run_orchestrated_analysis_sse(
             )
             final_prompt = f"""汇总指令：{synthesis_instruction}
 
-原始用户请求：{user_input}
+原始用户请求：{analysis_input}
 
 以下各专家的分析结果：
 
@@ -371,7 +438,7 @@ async def run_orchestrated_analysis_sse(
 
         # ═══ Phase 4: 保存到数据库 ═══
         # 收集所有 Specialist 的搜索引用
-        all_search_refs: list[dict] = []
+        all_search_refs: list[dict] = [*file_references]
         for r in results:
             sr = r.get("search_results")
             if sr and isinstance(sr, list):
@@ -380,6 +447,7 @@ async def run_orchestrated_analysis_sse(
 
         task.input_data = json.dumps({
             "user_input": user_input,
+            "file_ids": file_ids or [],
             "plan": plan,
             "subtask_results": results,
         }, ensure_ascii=False)

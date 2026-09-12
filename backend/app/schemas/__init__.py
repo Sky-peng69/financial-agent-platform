@@ -55,6 +55,7 @@ class AnalyzeRequest(BaseModel):
     """百炼编排模式：只需提供标题和分析内容，Commander 自动分配 Agent"""
     title: str = Field(min_length=1, max_length=500)
     input_data: str | None = None
+    file_ids: list[str] = Field(default_factory=list)
 
 
 class AgentInfo(BaseModel):
@@ -62,7 +63,7 @@ class AgentInfo(BaseModel):
     display_name: str
     description: str
     category: str
-    tools: list[str] = []
+    tools: list[str] = Field(default_factory=list)
 
 
 class ResearchFileResponse(BaseModel):
