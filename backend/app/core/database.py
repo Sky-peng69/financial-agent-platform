@@ -25,3 +25,13 @@ async def init_db():
                 "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS search_references TEXT"
             )
         )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_document_evidence_file_id ON document_evidence (file_id)"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_document_evidence_user_id ON document_evidence (user_id)"
+            )
+        )

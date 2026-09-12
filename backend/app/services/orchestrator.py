@@ -18,7 +18,7 @@ from app.agents.registry import (
     build_commander_system_prompt,
     get_specialist_prompt,
 )
-from app.models import FileStatus, ResearchFile, Task, TaskStatus
+from app.models import DocumentEvidence, FileStatus, ResearchFile, Task, TaskStatus
 from app.services.llm import chat
 
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
@@ -48,24 +48,36 @@ def _agent_display_name(agent_name: str) -> str:
 
 async def _build_recent_file_context(db: AsyncSession, user_id: str) -> str:
     """将用户最近上传的已解析材料作为隐式上下文，模拟对话附件体验。"""
-    result = await db.execute(
+    files_result = await db.execute(
         select(ResearchFile)
         .where(ResearchFile.user_id == user_id)
         .where(ResearchFile.status == FileStatus.PARSED)
         .order_by(desc(ResearchFile.created_at))
         .limit(MAX_ATTACHMENT_FILES)
     )
-    files = result.scalars().all()
+    files = files_result.scalars().all()
     if not files:
         return ""
 
     blocks: list[str] = []
     remaining = MAX_ATTACHMENT_CHARS_TOTAL
     for item in files:
-        text = (item.extracted_text or "").strip()
-        if not text:
+        evidence_result = await db.execute(
+            select(DocumentEvidence)
+            .where(DocumentEvidence.file_id == item.id)
+            .where(DocumentEvidence.user_id == user_id)
+            .order_by(DocumentEvidence.chunk_index)
+        )
+        evidence_items = evidence_result.scalars().all()
+        snippets = [
+            f"【{evidence.location_label}】\n{evidence.text.strip()}"
+            for evidence in evidence_items
+            if evidence.text.strip()
+        ]
+        evidence_text = "\n\n".join(snippets)
+        if not evidence_text:
             continue
-        excerpt = text[: min(MAX_ATTACHMENT_CHARS_PER_FILE, remaining)]
+        excerpt = evidence_text[: min(MAX_ATTACHMENT_CHARS_PER_FILE, remaining)]
         remaining -= len(excerpt)
         blocks.append(f"### {item.original_name}\n{excerpt}")
         if remaining <= 0:

@@ -75,3 +75,16 @@ class ResearchFileResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DocumentEvidenceResponse(BaseModel):
+    id: str
+    file_id: str
+    source_type: str
+    page_number: int | None = None
+    chunk_index: int
+    text: str
+    location_label: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

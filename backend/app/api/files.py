@@ -10,22 +10,26 @@ from starlette.responses import Response
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models import ResearchFile, Task, User, FileStatus
-from app.schemas import ResearchFileResponse
+from app.models import DocumentEvidence, ResearchFile, Task, User, FileStatus
+from app.schemas import DocumentEvidenceResponse, ResearchFileResponse
 from app.services.storage import LocalStorage
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 storage = LocalStorage(settings.storage_path)
 
 
-def _extract_pdf_text_by_page(content: bytes) -> str:
+def _extract_pdf_pages(content: bytes) -> list[tuple[int, str]]:
     reader = PdfReader(io.BytesIO(content))
-    pages: list[str] = []
+    pages: list[tuple[int, str]] = []
     for index, page in enumerate(reader.pages, start=1):
         page_text = (page.extract_text() or "").strip()
         if page_text:
-            pages.append(f"【第 {index} 页】\n{page_text}")
-    return "\n\n".join(pages).strip()
+            pages.append((index, page_text))
+    return pages
+
+
+def _format_pages_text(pages: list[tuple[int, str]]) -> str:
+    return "\n\n".join(f"【第 {page_number} 页】\n{text}" for page_number, text in pages).strip()
 
 
 @router.post("", response_model=ResearchFileResponse)
@@ -51,7 +55,8 @@ async def upload_file(
             raise HTTPException(status_code=404, detail="任务不存在")
 
     try:
-        extracted_text = _extract_pdf_text_by_page(content)
+        pages = _extract_pdf_pages(content)
+        extracted_text = _format_pages_text(pages)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"PDF 解析失败: {exc}") from exc
 
@@ -71,6 +76,17 @@ async def upload_file(
         status=FileStatus.PARSED,
     )
     db.add(record)
+    for chunk_index, (page_number, page_text) in enumerate(pages):
+        db.add(DocumentEvidence(
+            file_id=file_id,
+            user_id=user.id,
+            organization_id=user.organization_id,
+            source_type="pdf",
+            page_number=page_number,
+            chunk_index=chunk_index,
+            text=page_text,
+            location_label=f"第 {page_number} 页",
+        ))
     await db.commit()
     await db.refresh(record)
     return ResearchFileResponse.model_validate(record)
@@ -87,6 +103,25 @@ async def list_files(
         .order_by(desc(ResearchFile.created_at))
     )
     return [ResearchFileResponse.model_validate(item) for item in result.scalars().all()]
+
+
+@router.get("/{file_id}/evidence", response_model=list[DocumentEvidenceResponse])
+async def list_file_evidence(
+    file_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await db.get(ResearchFile, file_id)
+    if not record or record.user_id != user.id:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    result = await db.execute(
+        select(DocumentEvidence)
+        .where(DocumentEvidence.file_id == file_id)
+        .where(DocumentEvidence.user_id == user.id)
+        .order_by(DocumentEvidence.chunk_index)
+    )
+    return [DocumentEvidenceResponse.model_validate(item) for item in result.scalars().all()]
 
 
 @router.get("/{file_id}/download")
