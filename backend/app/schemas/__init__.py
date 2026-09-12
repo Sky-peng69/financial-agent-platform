@@ -135,6 +135,12 @@ class ResearchClaimCreate(BaseModel):
     status: str = Field(default="needs_review", max_length=30)
 
 
+class ResearchAssetReviewUpdate(BaseModel):
+    content: str | None = Field(default=None, min_length=1)
+    status: str | None = Field(default=None, max_length=30)
+    review_note: str | None = None
+
+
 class ResearchClaimResponse(BaseModel):
     id: str
     research_subject_id: str
@@ -146,6 +152,8 @@ class ResearchClaimResponse(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     verification_status: str = "needs_review"
     evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -169,6 +177,8 @@ class ResearchAssumptionResponse(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     verification_status: str = "needs_review"
     evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

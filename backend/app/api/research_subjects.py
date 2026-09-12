@@ -22,6 +22,7 @@ from app.schemas import (
     EvidenceSnippetResponse,
     ResearchAssumptionCreate,
     ResearchAssumptionResponse,
+    ResearchAssetReviewUpdate,
     ResearchChallengeCreate,
     ResearchChallengeResponse,
     ResearchClaimCreate,
@@ -34,6 +35,8 @@ from app.services.research_asset_generator import generate_research_assets
 
 router = APIRouter(prefix="/api/research-subjects", tags=["research-subjects"])
 
+REVIEW_STATUSES = {"needs_review", "active", "confirmed", "rejected"}
+
 
 async def _get_subject_for_user(
     subject_id: str,
@@ -44,6 +47,53 @@ async def _get_subject_for_user(
     if not subject or subject.user_id != user.id:
         raise HTTPException(status_code=404, detail="研究对象不存在")
     return subject
+
+
+async def _get_claim_for_subject(
+    claim_id: str,
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> ResearchClaim:
+    claim = await db.get(ResearchClaim, claim_id)
+    if not claim or claim.user_id != user.id or claim.research_subject_id != subject.id:
+        raise HTTPException(status_code=404, detail="判断不存在")
+    return claim
+
+
+async def _get_assumption_for_subject(
+    assumption_id: str,
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> ResearchAssumption:
+    assumption = await db.get(ResearchAssumption, assumption_id)
+    if not assumption or assumption.user_id != user.id or assumption.research_subject_id != subject.id:
+        raise HTTPException(status_code=404, detail="假设不存在")
+    return assumption
+
+
+def _apply_review_update(
+    item: ResearchClaim | ResearchAssumption,
+    data: ResearchAssetReviewUpdate,
+) -> None:
+    if data.content is not None:
+        content = data.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="内容不能为空")
+        item.content = content
+
+    if data.status is not None:
+        if data.status not in REVIEW_STATUSES:
+            raise HTTPException(status_code=400, detail="复核状态无效")
+        note = data.review_note.strip() if data.review_note else None
+        if data.status == "rejected" and not note:
+            raise HTTPException(status_code=400, detail="驳回时必须填写原因")
+        item.status = data.status
+        item.review_note = note
+        item.reviewed_at = datetime.now(timezone.utc) if data.status in {"confirmed", "rejected"} else None
+    elif data.review_note is not None:
+        item.review_note = data.review_note.strip() or None
 
 
 def _parse_evidence_ids(raw: str | None) -> list[str]:
@@ -87,6 +137,8 @@ def _claim_response(
         evidence_ids=evidence_ids,
         verification_status=claim.verification_status or "needs_review",
         evidence_items=evidence_items,
+        review_note=claim.review_note,
+        reviewed_at=claim.reviewed_at,
         created_at=claim.created_at,
         updated_at=claim.updated_at,
     )
@@ -110,6 +162,8 @@ def _assumption_response(
         evidence_ids=evidence_ids,
         verification_status=assumption.verification_status or "needs_review",
         evidence_items=evidence_items,
+        review_note=assumption.review_note,
+        reviewed_at=assumption.reviewed_at,
         created_at=assumption.created_at,
         updated_at=assumption.updated_at,
     )
@@ -139,6 +193,19 @@ def _asset_verification(
     if evidence_items:
         return [evidence_items[0].id], "needs_review"
     return [], "insufficient"
+
+
+async def _evidence_by_id_for_subject(
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> dict[str, DocumentEvidence]:
+    evidence_result = await db.execute(
+        select(DocumentEvidence)
+        .where(DocumentEvidence.research_subject_id == subject.id)
+        .where(DocumentEvidence.user_id == user.id)
+    )
+    return {item.id: item for item in evidence_result.scalars().all()}
 
 
 async def _build_workspace_response(
@@ -175,12 +242,7 @@ async def _build_workspace_response(
         .where(DocumentEvidence.research_subject_id == subject.id)
         .where(DocumentEvidence.user_id == user.id)
     )
-    evidence_result = await db.execute(
-        select(DocumentEvidence)
-        .where(DocumentEvidence.research_subject_id == subject.id)
-        .where(DocumentEvidence.user_id == user.id)
-    )
-    evidence_by_id = {item.id: item for item in evidence_result.scalars().all()}
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
 
     return ResearchSubjectWorkspaceResponse(
         subject=ResearchSubjectResponse.model_validate(subject),
@@ -372,7 +434,24 @@ async def create_research_claim(
     db.add(claim)
     await db.commit()
     await db.refresh(claim)
-    return ResearchClaimResponse.model_validate(claim)
+    return _claim_response(claim, {})
+
+
+@router.patch("/{subject_id}/claims/{claim_id}", response_model=ResearchClaimResponse)
+async def update_research_claim(
+    subject_id: str,
+    claim_id: str,
+    data: ResearchAssetReviewUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    claim = await _get_claim_for_subject(claim_id, subject, user, db)
+    _apply_review_update(claim, data)
+    await db.commit()
+    await db.refresh(claim)
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    return _claim_response(claim, evidence_by_id)
 
 
 @router.post("/{subject_id}/assumptions", response_model=ResearchAssumptionResponse)
@@ -394,7 +473,24 @@ async def create_research_assumption(
     db.add(assumption)
     await db.commit()
     await db.refresh(assumption)
-    return ResearchAssumptionResponse.model_validate(assumption)
+    return _assumption_response(assumption, {})
+
+
+@router.patch("/{subject_id}/assumptions/{assumption_id}", response_model=ResearchAssumptionResponse)
+async def update_research_assumption(
+    subject_id: str,
+    assumption_id: str,
+    data: ResearchAssetReviewUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    assumption = await _get_assumption_for_subject(assumption_id, subject, user, db)
+    _apply_review_update(assumption, data)
+    await db.commit()
+    await db.refresh(assumption)
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    return _assumption_response(assumption, evidence_by_id)
 
 
 @router.post("/{subject_id}/challenges", response_model=ResearchChallengeResponse)

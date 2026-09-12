@@ -67,11 +67,31 @@ async def init_db():
         )
         await conn.run_sync(
             lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE research_claims ADD COLUMN IF NOT EXISTS review_note TEXT"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE research_claims ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
                 "ALTER TABLE research_assumptions ADD COLUMN IF NOT EXISTS evidence_ids TEXT"
             )
         )
         await conn.run_sync(
             lambda sync_conn: sync_conn.exec_driver_sql(
                 "ALTER TABLE research_assumptions ADD COLUMN IF NOT EXISTS verification_status VARCHAR(30) DEFAULT 'needs_review'"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE research_assumptions ADD COLUMN IF NOT EXISTS review_note TEXT"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE research_assumptions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITH TIME ZONE"
             )
         )

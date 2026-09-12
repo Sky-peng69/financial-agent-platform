@@ -6,6 +6,8 @@ import {
   files as filesApi,
   researchSubjects,
   type EvidenceSnippet,
+  type ResearchAssumption,
+  type ResearchClaim,
   type ResearchSubjectWorkspace,
 } from "@/lib/api";
 
@@ -27,6 +29,15 @@ const VERIFICATION_LABELS: Record<string, string> = {
   insufficient: "证据不足",
 };
 
+const ASSET_STATUS_LABELS: Record<string, string> = {
+  active: "待复核",
+  needs_review: "待复核",
+  confirmed: "已确认",
+  rejected: "已驳回",
+};
+
+type AssetKind = "claim" | "assumption";
+
 function levelLabel(value: string | null | undefined) {
   if (!value) return "未定";
   return LEVEL_LABELS[value] || value;
@@ -38,6 +49,16 @@ function directionLabel(value: string) {
 
 function verificationLabel(value: string) {
   return VERIFICATION_LABELS[value] || value;
+}
+
+function assetStatusLabel(value: string) {
+  return ASSET_STATUS_LABELS[value] || value;
+}
+
+function assetStatusClass(value: string) {
+  if (value === "confirmed") return "badge-success";
+  if (value === "rejected") return "badge-error";
+  return "badge-neutral";
 }
 
 function formatDate(value: string) {
@@ -97,6 +118,8 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
   const [saving, setSaving] = useState("");
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<{ kind: AssetKind; id: string; content: string } | null>(null);
+  const [rejectingAsset, setRejectingAsset] = useState<{ kind: AssetKind; id: string; note: string } | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [claimForm, setClaimForm] = useState({
@@ -242,6 +265,69 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
     }
   }
 
+  function assetKey(kind: AssetKind, assetId: string) {
+    return `${kind}:${assetId}`;
+  }
+
+  async function updateAsset(
+    kind: AssetKind,
+    assetId: string,
+    data: { content?: string; status?: string; review_note?: string | null },
+    successMessage: string,
+  ) {
+    setSaving(assetKey(kind, assetId));
+    setError("");
+    setMessage("");
+    try {
+      if (kind === "claim") {
+        await researchSubjects.updateClaim(id, assetId, data);
+      } else {
+        await researchSubjects.updateAssumption(id, assetId, data);
+      }
+      const updated = await researchSubjects.workspace(id);
+      setWorkspace(updated);
+      setEditingAsset(null);
+      setRejectingAsset(null);
+      setMessage(successMessage);
+    } catch (err: any) {
+      setError(err.message || "保存失败");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  function startEdit(kind: AssetKind, asset: ResearchClaim | ResearchAssumption) {
+    setEditingAsset({ kind, id: asset.id, content: asset.content });
+    setRejectingAsset(null);
+  }
+
+  async function submitEdit(kind: AssetKind, assetId: string) {
+    if (!editingAsset || !editingAsset.content.trim()) return;
+    await updateAsset(kind, assetId, { content: editingAsset.content.trim() }, "已保存修改");
+  }
+
+  async function confirmAsset(kind: AssetKind, assetId: string) {
+    await updateAsset(kind, assetId, { status: "confirmed", review_note: null }, "已确认");
+  }
+
+  function startReject(kind: AssetKind, assetId: string) {
+    setRejectingAsset({ kind, id: assetId, note: "" });
+    setEditingAsset(null);
+  }
+
+  async function submitReject(kind: AssetKind, assetId: string) {
+    if (!rejectingAsset || !rejectingAsset.note.trim()) {
+      setError("请填写驳回原因");
+      return;
+    }
+    await updateAsset(
+      kind,
+      assetId,
+      { status: "rejected", review_note: rejectingAsset.note.trim() },
+      "已驳回",
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full py-24">
@@ -265,6 +351,102 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
 
   const { subject } = workspace;
   const latestMemo = workspace.decision_memos[0];
+
+  function renderAssetReview(kind: AssetKind, asset: ResearchClaim | ResearchAssumption) {
+    const isEditing = editingAsset?.kind === kind && editingAsset.id === asset.id;
+    const isRejecting = rejectingAsset?.kind === kind && rejectingAsset.id === asset.id;
+    const busy = saving === assetKey(kind, asset.id);
+
+    return (
+      <>
+        {isEditing && editingAsset ? (
+          <div className="space-y-2">
+            <textarea
+              className="input-field min-h-[96px] resize-none"
+              value={editingAsset.content}
+              onChange={(e) => setEditingAsset({ ...editingAsset, content: e.target.value })}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn-primary text-xs px-3 py-2"
+                onClick={() => submitEdit(kind, asset.id)}
+                disabled={busy || !editingAsset.content.trim()}
+              >
+                {busy ? "保存中..." : "保存修改"}
+              </button>
+              <button className="btn-secondary text-xs px-3 py-2" onClick={() => setEditingAsset(null)} disabled={busy}>
+                取消
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[#111827] text-sm leading-relaxed">{asset.content}</p>
+        )}
+
+        <EvidenceDetails
+          evidenceItems={asset.evidence_items}
+          verificationStatus={asset.verification_status}
+        />
+
+        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[#F1F3F5]">
+          <span className={assetStatusClass(asset.status)}>{assetStatusLabel(asset.status)}</span>
+          {asset.reviewed_at && (
+            <span className="text-[#9CA3AF] text-xs">{formatDate(asset.reviewed_at)}</span>
+          )}
+          <button
+            className="text-[#059669] hover:text-[#047857] text-xs font-medium disabled:text-[#9CA3AF]"
+            onClick={() => confirmAsset(kind, asset.id)}
+            disabled={busy || asset.status === "confirmed"}
+          >
+            确认
+          </button>
+          <button
+            className="text-[#DC2626] hover:text-[#B91C1C] text-xs font-medium disabled:text-[#9CA3AF]"
+            onClick={() => startReject(kind, asset.id)}
+            disabled={busy || asset.status === "rejected"}
+          >
+            驳回
+          </button>
+          <button
+            className="text-[#2563EB] hover:text-[#1D4ED8] text-xs font-medium disabled:text-[#9CA3AF]"
+            onClick={() => startEdit(kind, asset)}
+            disabled={busy}
+          >
+            编辑
+          </button>
+        </div>
+
+        {asset.review_note && (
+          <p className="text-[#6B7280] text-xs mt-2">复核备注：{asset.review_note}</p>
+        )}
+
+        {isRejecting && rejectingAsset && (
+          <div className="mt-3 bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg p-3 space-y-2">
+            <textarea
+              className="input-field min-h-[72px] resize-none"
+              value={rejectingAsset.note}
+              onChange={(e) => setRejectingAsset({ ...rejectingAsset, note: e.target.value })}
+              placeholder="填写驳回原因"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn-primary text-xs px-3 py-2"
+                onClick={() => submitReject(kind, asset.id)}
+                disabled={busy || !rejectingAsset.note.trim()}
+              >
+                {busy ? "保存中..." : "保存驳回"}
+              </button>
+              <button className="btn-secondary text-xs px-3 py-2" onClick={() => setRejectingAsset(null)} disabled={busy}>
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
+        <p className="text-[#9CA3AF] text-xs mt-2">{formatDate(asset.updated_at)}</p>
+      </>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -349,12 +531,7 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
                         {verificationLabel(claim.verification_status)}
                       </span>
                     </div>
-                    <p className="text-[#111827] text-sm leading-relaxed">{claim.content}</p>
-                    <EvidenceDetails
-                      evidenceItems={claim.evidence_items}
-                      verificationStatus={claim.verification_status}
-                    />
-                    <p className="text-[#9CA3AF] text-xs mt-2">{formatDate(claim.updated_at)}</p>
+                    {renderAssetReview("claim", claim)}
                   </div>
                 ))}
               </div>
@@ -379,11 +556,7 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
                         {verificationLabel(assumption.verification_status)}
                       </span>
                     </div>
-                    <p className="text-[#111827] text-sm leading-relaxed">{assumption.content}</p>
-                    <EvidenceDetails
-                      evidenceItems={assumption.evidence_items}
-                      verificationStatus={assumption.verification_status}
-                    />
+                    {renderAssetReview("assumption", assumption)}
                   </div>
                 ))}
               </div>

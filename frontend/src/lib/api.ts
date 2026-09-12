@@ -417,6 +417,8 @@ export interface ResearchClaim {
   evidence_ids: string[];
   verification_status: string;
   evidence_items: EvidenceSnippet[];
+  review_note: string | null;
+  reviewed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -431,6 +433,8 @@ export interface ResearchAssumption {
   evidence_ids: string[];
   verification_status: string;
   evidence_items: EvidenceSnippet[];
+  review_note: string | null;
+  reviewed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -499,6 +503,15 @@ export const researchSubjects = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateClaim: (
+    subjectId: string,
+    claimId: string,
+    data: { content?: string; status?: string; review_note?: string | null },
+  ) =>
+    request<ResearchClaim>(`/api/research-subjects/${subjectId}/claims/${claimId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   createAssumption: (
     subjectId: string,
     data: {
@@ -510,6 +523,15 @@ export const researchSubjects = {
   ) =>
     request<ResearchAssumption>(`/api/research-subjects/${subjectId}/assumptions`, {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateAssumption: (
+    subjectId: string,
+    assumptionId: string,
+    data: { content?: string; status?: string; review_note?: string | null },
+  ) =>
+    request<ResearchAssumption>(`/api/research-subjects/${subjectId}/assumptions/${assumptionId}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
   createChallenge: (
