@@ -337,6 +337,7 @@ export const tasks = {
 
 export interface ResearchFile {
   id: string;
+  research_subject_id: string | null;
   task_id: string | null;
   original_name: string;
   content_type: string;
@@ -347,11 +348,12 @@ export interface ResearchFile {
 
 export const files = {
   list: () => request<ResearchFile[]>("/api/files"),
-  upload: async (file: File, taskId?: string | null) => {
+  upload: async (file: File, taskId?: string | null, researchSubjectId?: string | null) => {
     const t = token();
     const body = new FormData();
     body.append("file", file);
     if (taskId) body.append("task_id", taskId);
+    if (researchSubjectId) body.append("research_subject_id", researchSubjectId);
 
     let res: Response;
     try {
@@ -380,6 +382,145 @@ export const files = {
 
     return res.json() as Promise<ResearchFile>;
   },
+};
+
+export interface ResearchSubject {
+  id: string;
+  company_name: string;
+  ticker: string | null;
+  industry: string | null;
+  status: string;
+  current_view: string | null;
+  confidence_level: string | null;
+  evidence_strength: string | null;
+  last_view_updated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchClaim {
+  id: string;
+  research_subject_id: string;
+  content: string;
+  direction: string;
+  confidence_level: string;
+  evidence_strength: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchAssumption {
+  id: string;
+  research_subject_id: string;
+  content: string;
+  category: string;
+  confidence_level: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchChallenge {
+  id: string;
+  research_subject_id: string;
+  claim_id: string | null;
+  question: string;
+  risk_level: string;
+  suggested_action: string | null;
+  created_at: string;
+}
+
+export interface DecisionMemo {
+  id: string;
+  research_subject_id: string;
+  current_conclusion: string;
+  key_basis: string | null;
+  biggest_uncertainty: string | null;
+  suggested_action: string | null;
+  review_status: string;
+  created_at: string;
+}
+
+export interface ResearchSubjectWorkspace {
+  subject: ResearchSubject;
+  claims: ResearchClaim[];
+  assumptions: ResearchAssumption[];
+  challenges: ResearchChallenge[];
+  decision_memos: DecisionMemo[];
+  evidence_count: number;
+}
+
+export const researchSubjects = {
+  list: () => request<ResearchSubject[]>("/api/research-subjects"),
+  create: (data: {
+    company_name: string;
+    ticker?: string | null;
+    industry?: string | null;
+    current_view?: string | null;
+    confidence_level?: string | null;
+    evidence_strength?: string | null;
+  }) =>
+    request<ResearchSubject>("/api/research-subjects", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  workspace: (id: string) =>
+    request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/workspace`),
+  createClaim: (
+    subjectId: string,
+    data: {
+      content: string;
+      direction?: string;
+      confidence_level?: string;
+      evidence_strength?: string;
+      status?: string;
+    },
+  ) =>
+    request<ResearchClaim>(`/api/research-subjects/${subjectId}/claims`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createAssumption: (
+    subjectId: string,
+    data: {
+      content: string;
+      category?: string;
+      confidence_level?: string;
+      status?: string;
+    },
+  ) =>
+    request<ResearchAssumption>(`/api/research-subjects/${subjectId}/assumptions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createChallenge: (
+    subjectId: string,
+    data: {
+      question: string;
+      claim_id?: string | null;
+      risk_level?: string;
+      suggested_action?: string | null;
+    },
+  ) =>
+    request<ResearchChallenge>(`/api/research-subjects/${subjectId}/challenges`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createDecisionMemo: (
+    subjectId: string,
+    data: {
+      current_conclusion: string;
+      key_basis?: string | null;
+      biggest_uncertainty?: string | null;
+      suggested_action?: string | null;
+      review_status?: string;
+    },
+  ) =>
+    request<DecisionMemo>(`/api/research-subjects/${subjectId}/decision-memos`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 export interface User {

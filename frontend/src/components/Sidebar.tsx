@@ -30,6 +30,18 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: "公司研究",
+    href: "/dashboard/research",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16v16H4z" />
+        <path d="M8 8h8" />
+        <path d="M8 12h8" />
+        <path d="M8 16h5" />
+      </svg>
+    ),
+  },
+  {
     label: "任务历史",
     href: "/dashboard/tasks",
     icon: (
