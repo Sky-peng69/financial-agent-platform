@@ -2,24 +2,27 @@
 
 ## Unique Next Action
 
-为判断和假设增加版本历史与复核审计记录。
+将旧 Commander 分析入口并入公司研究对象流程。
 
 ## Why This Is Next
 
-当前判断和假设已经可以被确认、驳回和编辑，但编辑后的内容会覆盖当前文本。下一步要记录“谁在什么时候把什么内容改成了什么、为什么驳回或确认”，否则专业投研场景里无法形成可审计的判断演进链。
+公司研究对象已经具备材料、证据、判断、假设、复核和审计历史，但旧的 Commander 分析仍主要围绕 Task/报告输出。下一步要让用户从某个公司研究对象发起分析，并把结果沉淀回该对象的判断资产，而不是形成另一条割裂的报告流。
 
 ## Inputs Needed
 
 - `backend/app/api/research_subjects.py`
+- `backend/app/api/agents.py`
+- `backend/app/agents/*`
+- `backend/app/services/research_asset_generator.py`
 - `backend/app/models/__init__.py`
-- `backend/app/schemas/__init__.py`
 - `frontend/src/app/dashboard/research/[id]/page.tsx`
 
 ## Stop Condition
 
-- 每次确认、驳回和编辑都会写入一条不可变历史记录。
-- 历史记录包含资产类型、资产 ID、动作、原内容、新内容、复核备注、操作人和时间。
-- 前端可以在判断/假设卡片中展开查看变更历史。
+- 用户可以在公司研究对象页面发起一次结构化分析。
+- 分析输入自动包含该研究对象下的材料证据，但前端不刻意展示内部片段注入过程。
+- 分析结果写回该研究对象的判断、假设、挑战或备忘录。
+- 旧 Task/Commander 输出与新研究对象资产之间保留可追溯关系或明确边界。
 
 ## Before Continuing Checklist
 

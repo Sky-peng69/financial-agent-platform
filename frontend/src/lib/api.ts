@@ -406,6 +406,21 @@ export interface EvidenceSnippet {
   text: string;
 }
 
+export interface ResearchAssetAudit {
+  id: string;
+  research_subject_id: string;
+  user_id: string;
+  asset_type: string;
+  asset_id: string;
+  action: string;
+  previous_content: string | null;
+  new_content: string | null;
+  previous_status: string | null;
+  new_status: string | null;
+  review_note: string | null;
+  created_at: string;
+}
+
 export interface ResearchClaim {
   id: string;
   research_subject_id: string;
@@ -419,6 +434,7 @@ export interface ResearchClaim {
   evidence_items: EvidenceSnippet[];
   review_note: string | null;
   reviewed_at: string | null;
+  history: ResearchAssetAudit[];
   created_at: string;
   updated_at: string;
 }
@@ -435,6 +451,7 @@ export interface ResearchAssumption {
   evidence_items: EvidenceSnippet[];
   review_note: string | null;
   reviewed_at: string | null;
+  history: ResearchAssetAudit[];
   created_at: string;
   updated_at: string;
 }

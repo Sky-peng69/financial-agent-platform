@@ -7,6 +7,7 @@ import {
   researchSubjects,
   type EvidenceSnippet,
   type ResearchAssumption,
+  type ResearchAssetAudit,
   type ResearchClaim,
   type ResearchSubjectWorkspace,
 } from "@/lib/api";
@@ -36,6 +37,14 @@ const ASSET_STATUS_LABELS: Record<string, string> = {
   rejected: "已驳回",
 };
 
+const ASSET_ACTION_LABELS: Record<string, string> = {
+  edited: "编辑",
+  confirmed: "确认",
+  rejected: "驳回",
+  updated: "更新",
+  review_note_updated: "更新备注",
+};
+
 type AssetKind = "claim" | "assumption";
 
 function levelLabel(value: string | null | undefined) {
@@ -59,6 +68,10 @@ function assetStatusClass(value: string) {
   if (value === "confirmed") return "badge-success";
   if (value === "rejected") return "badge-error";
   return "badge-neutral";
+}
+
+function assetActionLabel(value: string) {
+  return ASSET_ACTION_LABELS[value] || value;
 }
 
 function formatDate(value: string) {
@@ -103,6 +116,51 @@ function EvidenceDetails({
               )}
             </div>
             <p className="text-[#6B7280] text-xs leading-relaxed line-clamp-4">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function AssetHistory({ history }: { history: ResearchAssetAudit[] }) {
+  if (history.length === 0) {
+    return null;
+  }
+
+  return (
+    <details className="mt-3 border-t border-[#F1F3F5] pt-3 group">
+      <summary className="cursor-pointer list-none text-[#6B7280] hover:text-[#111827] text-xs font-medium">
+        变更历史 {history.length}
+      </summary>
+      <div className="space-y-2 mt-3">
+        {history.map((item) => (
+          <div key={item.id} className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="badge-neutral">{assetActionLabel(item.action)}</span>
+              <span className="text-[#9CA3AF] text-[11px]">{formatDate(item.created_at)}</span>
+              <span className="text-[#9CA3AF] text-[11px]">操作人 {item.user_id.slice(0, 8)}</span>
+            </div>
+            {item.previous_status !== item.new_status && (
+              <p className="text-[#6B7280] text-xs mt-2">
+                状态：{assetStatusLabel(item.previous_status || "未定")} → {assetStatusLabel(item.new_status || "未定")}
+              </p>
+            )}
+            {item.previous_content !== item.new_content && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                <div className="bg-white border border-[#E5E7EB] rounded-md px-2 py-2">
+                  <p className="text-[#9CA3AF] text-[11px] mb-1">变更前</p>
+                  <p className="text-[#6B7280] text-xs leading-relaxed line-clamp-4">{item.previous_content || "空"}</p>
+                </div>
+                <div className="bg-white border border-[#E5E7EB] rounded-md px-2 py-2">
+                  <p className="text-[#9CA3AF] text-[11px] mb-1">变更后</p>
+                  <p className="text-[#111827] text-xs leading-relaxed line-clamp-4">{item.new_content || "空"}</p>
+                </div>
+              </div>
+            )}
+            {item.review_note && (
+              <p className="text-[#6B7280] text-xs mt-2">备注：{item.review_note}</p>
+            )}
           </div>
         ))}
       </div>
@@ -419,6 +477,8 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
         {asset.review_note && (
           <p className="text-[#6B7280] text-xs mt-2">复核备注：{asset.review_note}</p>
         )}
+
+        <AssetHistory history={asset.history} />
 
         {isRejecting && rejectingAsset && (
           <div className="mt-3 bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg p-3 space-y-2">

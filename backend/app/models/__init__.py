@@ -102,6 +102,7 @@ class ResearchSubject(Base):
     assumptions: Mapped[list["ResearchAssumption"]] = relationship(back_populates="research_subject", cascade="all, delete-orphan")
     challenges: Mapped[list["ResearchChallenge"]] = relationship(back_populates="research_subject", cascade="all, delete-orphan")
     decision_memos: Mapped[list["DecisionMemo"]] = relationship(back_populates="research_subject", cascade="all, delete-orphan")
+    asset_audits: Mapped[list["ResearchAssetAudit"]] = relationship(back_populates="research_subject", cascade="all, delete-orphan")
 
 
 class ResearchFile(Base):
@@ -195,6 +196,25 @@ class ResearchAssumption(Base):
     )
 
     research_subject: Mapped[ResearchSubject] = relationship(back_populates="assumptions")
+
+
+class ResearchAssetAudit(Base):
+    __tablename__ = "research_asset_audits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    research_subject_id: Mapped[str] = mapped_column(ForeignKey("research_subjects.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    asset_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    previous_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    new_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    research_subject: Mapped[ResearchSubject] = relationship(back_populates="asset_audits")
 
 
 class ResearchChallenge(Base):

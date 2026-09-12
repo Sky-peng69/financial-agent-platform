@@ -11,6 +11,7 @@ from app.models import (
     DecisionMemo,
     DocumentEvidence,
     ResearchAssumption,
+    ResearchAssetAudit,
     ResearchChallenge,
     ResearchClaim,
     ResearchSubject,
@@ -22,6 +23,7 @@ from app.schemas import (
     EvidenceSnippetResponse,
     ResearchAssumptionCreate,
     ResearchAssumptionResponse,
+    ResearchAssetAuditResponse,
     ResearchAssetReviewUpdate,
     ResearchChallengeCreate,
     ResearchChallengeResponse,
@@ -76,12 +78,14 @@ async def _get_assumption_for_subject(
 def _apply_review_update(
     item: ResearchClaim | ResearchAssumption,
     data: ResearchAssetReviewUpdate,
-) -> None:
+) -> str:
+    action = "updated"
     if data.content is not None:
         content = data.content.strip()
         if not content:
             raise HTTPException(status_code=400, detail="内容不能为空")
         item.content = content
+        action = "edited"
 
     if data.status is not None:
         if data.status not in REVIEW_STATUSES:
@@ -92,8 +96,16 @@ def _apply_review_update(
         item.status = data.status
         item.review_note = note
         item.reviewed_at = datetime.now(timezone.utc) if data.status in {"confirmed", "rejected"} else None
+        if data.status == "confirmed":
+            action = "confirmed"
+        elif data.status == "rejected":
+            action = "rejected"
+        else:
+            action = "updated"
     elif data.review_note is not None:
         item.review_note = data.review_note.strip() or None
+        action = "review_note_updated"
+    return action
 
 
 def _parse_evidence_ids(raw: str | None) -> list[str]:
@@ -124,7 +136,9 @@ def _evidence_items_for_asset(
 def _claim_response(
     claim: ResearchClaim,
     evidence_by_id: dict[str, DocumentEvidence],
+    history_by_asset_id: dict[str, list[ResearchAssetAudit]] | None = None,
 ) -> ResearchClaimResponse:
+    history_by_asset_id = history_by_asset_id or {}
     evidence_ids, evidence_items = _evidence_items_for_asset(claim.evidence_ids, evidence_by_id)
     return ResearchClaimResponse(
         id=claim.id,
@@ -139,6 +153,10 @@ def _claim_response(
         evidence_items=evidence_items,
         review_note=claim.review_note,
         reviewed_at=claim.reviewed_at,
+        history=[
+            ResearchAssetAuditResponse.model_validate(item)
+            for item in history_by_asset_id.get(claim.id, [])
+        ],
         created_at=claim.created_at,
         updated_at=claim.updated_at,
     )
@@ -147,7 +165,9 @@ def _claim_response(
 def _assumption_response(
     assumption: ResearchAssumption,
     evidence_by_id: dict[str, DocumentEvidence],
+    history_by_asset_id: dict[str, list[ResearchAssetAudit]] | None = None,
 ) -> ResearchAssumptionResponse:
+    history_by_asset_id = history_by_asset_id or {}
     evidence_ids, evidence_items = _evidence_items_for_asset(
         assumption.evidence_ids,
         evidence_by_id,
@@ -164,6 +184,10 @@ def _assumption_response(
         evidence_items=evidence_items,
         review_note=assumption.review_note,
         reviewed_at=assumption.reviewed_at,
+        history=[
+            ResearchAssetAuditResponse.model_validate(item)
+            for item in history_by_asset_id.get(assumption.id, [])
+        ],
         created_at=assumption.created_at,
         updated_at=assumption.updated_at,
     )
@@ -208,6 +232,51 @@ async def _evidence_by_id_for_subject(
     return {item.id: item for item in evidence_result.scalars().all()}
 
 
+async def _history_by_asset_for_subject(
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> dict[str, list[ResearchAssetAudit]]:
+    history_result = await db.execute(
+        select(ResearchAssetAudit)
+        .where(ResearchAssetAudit.research_subject_id == subject.id)
+        .where(ResearchAssetAudit.user_id == user.id)
+        .order_by(desc(ResearchAssetAudit.created_at))
+    )
+    history_by_asset_id: dict[str, list[ResearchAssetAudit]] = {}
+    for item in history_result.scalars().all():
+        history_by_asset_id.setdefault(item.asset_id, []).append(item)
+    return history_by_asset_id
+
+
+def _add_asset_audit(
+    db: AsyncSession,
+    *,
+    subject: ResearchSubject,
+    user: User,
+    asset_type: str,
+    asset_id: str,
+    action: str,
+    previous_content: str | None,
+    new_content: str | None,
+    previous_status: str | None,
+    new_status: str | None,
+    review_note: str | None,
+) -> None:
+    db.add(ResearchAssetAudit(
+        research_subject_id=subject.id,
+        user_id=user.id,
+        asset_type=asset_type,
+        asset_id=asset_id,
+        action=action,
+        previous_content=previous_content,
+        new_content=new_content,
+        previous_status=previous_status,
+        new_status=new_status,
+        review_note=review_note,
+    ))
+
+
 async def _build_workspace_response(
     subject: ResearchSubject,
     user: User,
@@ -243,15 +312,16 @@ async def _build_workspace_response(
         .where(DocumentEvidence.user_id == user.id)
     )
     evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
 
     return ResearchSubjectWorkspaceResponse(
         subject=ResearchSubjectResponse.model_validate(subject),
         claims=[
-            _claim_response(item, evidence_by_id)
+            _claim_response(item, evidence_by_id, history_by_asset_id)
             for item in claims_result.scalars().all()
         ],
         assumptions=[
-            _assumption_response(item, evidence_by_id)
+            _assumption_response(item, evidence_by_id, history_by_asset_id)
             for item in assumptions_result.scalars().all()
         ],
         challenges=[
@@ -447,11 +517,27 @@ async def update_research_claim(
 ):
     subject = await _get_subject_for_user(subject_id, user, db)
     claim = await _get_claim_for_subject(claim_id, subject, user, db)
-    _apply_review_update(claim, data)
+    previous_content = claim.content
+    previous_status = claim.status
+    action = _apply_review_update(claim, data)
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="claim",
+        asset_id=claim.id,
+        action=action,
+        previous_content=previous_content,
+        new_content=claim.content,
+        previous_status=previous_status,
+        new_status=claim.status,
+        review_note=data.review_note.strip() if data.review_note else None,
+    )
     await db.commit()
     await db.refresh(claim)
     evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
-    return _claim_response(claim, evidence_by_id)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _claim_response(claim, evidence_by_id, history_by_asset_id)
 
 
 @router.post("/{subject_id}/assumptions", response_model=ResearchAssumptionResponse)
@@ -486,11 +572,27 @@ async def update_research_assumption(
 ):
     subject = await _get_subject_for_user(subject_id, user, db)
     assumption = await _get_assumption_for_subject(assumption_id, subject, user, db)
-    _apply_review_update(assumption, data)
+    previous_content = assumption.content
+    previous_status = assumption.status
+    action = _apply_review_update(assumption, data)
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="assumption",
+        asset_id=assumption.id,
+        action=action,
+        previous_content=previous_content,
+        new_content=assumption.content,
+        previous_status=previous_status,
+        new_status=assumption.status,
+        review_note=data.review_note.strip() if data.review_note else None,
+    )
     await db.commit()
     await db.refresh(assumption)
     evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
-    return _assumption_response(assumption, evidence_by_id)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _assumption_response(assumption, evidence_by_id, history_by_asset_id)
 
 
 @router.post("/{subject_id}/challenges", response_model=ResearchChallengeResponse)

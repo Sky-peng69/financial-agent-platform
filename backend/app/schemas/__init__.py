@@ -141,6 +141,23 @@ class ResearchAssetReviewUpdate(BaseModel):
     review_note: str | None = None
 
 
+class ResearchAssetAuditResponse(BaseModel):
+    id: str
+    research_subject_id: str
+    user_id: str
+    asset_type: str
+    asset_id: str
+    action: str
+    previous_content: str | None = None
+    new_content: str | None = None
+    previous_status: str | None = None
+    new_status: str | None = None
+    review_note: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ResearchClaimResponse(BaseModel):
     id: str
     research_subject_id: str
@@ -154,6 +171,7 @@ class ResearchClaimResponse(BaseModel):
     evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
     review_note: str | None = None
     reviewed_at: datetime | None = None
+    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -179,6 +197,7 @@ class ResearchAssumptionResponse(BaseModel):
     evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
     review_note: str | None = None
     reviewed_at: datetime | None = None
+    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
