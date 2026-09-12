@@ -10,7 +10,7 @@ from starlette.responses import Response
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models import DocumentEvidence, ResearchFile, Task, User, FileStatus
+from app.models import DocumentEvidence, ResearchFile, ResearchSubject, Task, User, FileStatus
 from app.schemas import DocumentEvidenceResponse, ResearchFileResponse
 from app.services.storage import LocalStorage
 
@@ -36,6 +36,7 @@ def _format_pages_text(pages: list[tuple[int, str]]) -> str:
 async def upload_file(
     file: UploadFile = File(...),
     task_id: str | None = Form(None),
+    research_subject_id: str | None = Form(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -53,6 +54,10 @@ async def upload_file(
         task = await db.get(Task, task_id)
         if not task or task.user_id != user.id:
             raise HTTPException(status_code=404, detail="任务不存在")
+    if research_subject_id:
+        subject = await db.get(ResearchSubject, research_subject_id)
+        if not subject or subject.user_id != user.id:
+            raise HTTPException(status_code=404, detail="研究对象不存在")
 
     try:
         pages = _extract_pdf_pages(content)
@@ -67,6 +72,7 @@ async def upload_file(
         id=file_id,
         user_id=user.id,
         organization_id=user.organization_id,
+        research_subject_id=research_subject_id,
         task_id=task_id,
         original_name=filename,
         storage_key=storage_key,
@@ -81,6 +87,7 @@ async def upload_file(
             file_id=file_id,
             user_id=user.id,
             organization_id=user.organization_id,
+            research_subject_id=research_subject_id,
             source_type="pdf",
             page_number=page_number,
             chunk_index=chunk_index,

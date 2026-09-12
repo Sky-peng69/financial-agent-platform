@@ -27,6 +27,26 @@ async def init_db():
         )
         await conn.run_sync(
             lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE research_files ADD COLUMN IF NOT EXISTS research_subject_id VARCHAR(36)"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "ALTER TABLE document_evidence ADD COLUMN IF NOT EXISTS research_subject_id VARCHAR(36)"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_research_files_research_subject_id ON research_files (research_subject_id)"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_document_evidence_research_subject_id ON document_evidence (research_subject_id)"
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: sync_conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_document_evidence_file_id ON document_evidence (file_id)"
             )
         )
