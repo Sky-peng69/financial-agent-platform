@@ -28,6 +28,7 @@ from app.schemas import (
     ResearchSubjectResponse,
     ResearchSubjectWorkspaceResponse,
 )
+from app.services.research_asset_generator import generate_research_assets
 
 router = APIRouter(prefix="/api/research-subjects", tags=["research-subjects"])
 
@@ -43,51 +44,11 @@ async def _get_subject_for_user(
     return subject
 
 
-@router.post("", response_model=ResearchSubjectResponse)
-async def create_research_subject(
-    data: ResearchSubjectCreate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    now = datetime.now(timezone.utc)
-    subject = ResearchSubject(
-        user_id=user.id,
-        organization_id=user.organization_id,
-        company_name=data.company_name,
-        ticker=data.ticker,
-        industry=data.industry,
-        current_view=data.current_view,
-        confidence_level=data.confidence_level,
-        evidence_strength=data.evidence_strength,
-        last_view_updated_at=now if data.current_view else None,
-    )
-    db.add(subject)
-    await db.commit()
-    await db.refresh(subject)
-    return ResearchSubjectResponse.model_validate(subject)
-
-
-@router.get("", response_model=list[ResearchSubjectResponse])
-async def list_research_subjects(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(ResearchSubject)
-        .where(ResearchSubject.user_id == user.id)
-        .order_by(desc(ResearchSubject.updated_at))
-    )
-    return [ResearchSubjectResponse.model_validate(item) for item in result.scalars().all()]
-
-
-@router.get("/{subject_id}/workspace", response_model=ResearchSubjectWorkspaceResponse)
-async def get_research_subject_workspace(
-    subject_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    subject = await _get_subject_for_user(subject_id, user, db)
-
+async def _build_workspace_response(
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> ResearchSubjectWorkspaceResponse:
     claims_result = await db.execute(
         select(ResearchClaim)
         .where(ResearchClaim.research_subject_id == subject.id)
@@ -137,6 +98,53 @@ async def get_research_subject_workspace(
     )
 
 
+@router.post("", response_model=ResearchSubjectResponse)
+async def create_research_subject(
+    data: ResearchSubjectCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    subject = ResearchSubject(
+        user_id=user.id,
+        organization_id=user.organization_id,
+        company_name=data.company_name,
+        ticker=data.ticker,
+        industry=data.industry,
+        current_view=data.current_view,
+        confidence_level=data.confidence_level,
+        evidence_strength=data.evidence_strength,
+        last_view_updated_at=now if data.current_view else None,
+    )
+    db.add(subject)
+    await db.commit()
+    await db.refresh(subject)
+    return ResearchSubjectResponse.model_validate(subject)
+
+
+@router.get("", response_model=list[ResearchSubjectResponse])
+async def list_research_subjects(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ResearchSubject)
+        .where(ResearchSubject.user_id == user.id)
+        .order_by(desc(ResearchSubject.updated_at))
+    )
+    return [ResearchSubjectResponse.model_validate(item) for item in result.scalars().all()]
+
+
+@router.get("/{subject_id}/workspace", response_model=ResearchSubjectWorkspaceResponse)
+async def get_research_subject_workspace(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    return await _build_workspace_response(subject, user, db)
+
+
 @router.get("/{subject_id}", response_model=ResearchSubjectResponse)
 async def get_research_subject(
     subject_id: str,
@@ -145,6 +153,83 @@ async def get_research_subject(
 ):
     subject = await _get_subject_for_user(subject_id, user, db)
     return ResearchSubjectResponse.model_validate(subject)
+
+
+@router.post("/{subject_id}/generate-assets", response_model=ResearchSubjectWorkspaceResponse)
+async def generate_subject_assets(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    evidence_result = await db.execute(
+        select(DocumentEvidence)
+        .where(DocumentEvidence.research_subject_id == subject.id)
+        .where(DocumentEvidence.user_id == user.id)
+        .order_by(DocumentEvidence.created_at, DocumentEvidence.chunk_index)
+        .limit(20)
+    )
+    evidence_items = evidence_result.scalars().all()
+    if not any(item.text.strip() for item in evidence_items):
+        raise HTTPException(status_code=400, detail="请先上传可解析的研究材料")
+
+    try:
+        assets = await generate_research_assets(subject, evidence_items)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="AI 服务暂不可用，请检查模型配置后重试") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="生成结果未达到结构化要求，请重试") from exc
+
+    for item in assets["claims"]:
+        db.add(ResearchClaim(
+            research_subject_id=subject.id,
+            user_id=user.id,
+            content=item["content"],
+            direction=item["direction"],
+            confidence_level=item["confidence_level"],
+            evidence_strength=item["evidence_strength"],
+            status=item["status"],
+        ))
+
+    for item in assets["assumptions"]:
+        db.add(ResearchAssumption(
+            research_subject_id=subject.id,
+            user_id=user.id,
+            content=item["content"],
+            category=item["category"],
+            confidence_level=item["confidence_level"],
+            status=item["status"],
+        ))
+
+    for item in assets["challenges"]:
+        db.add(ResearchChallenge(
+            research_subject_id=subject.id,
+            user_id=user.id,
+            question=item["question"],
+            risk_level=item["risk_level"],
+            suggested_action=item["suggested_action"],
+        ))
+
+    memo_data = assets["decision_memo"]
+    db.add(DecisionMemo(
+        research_subject_id=subject.id,
+        user_id=user.id,
+        current_conclusion=memo_data["current_conclusion"],
+        key_basis=memo_data["key_basis"],
+        biggest_uncertainty=memo_data["biggest_uncertainty"],
+        suggested_action=memo_data["suggested_action"],
+        review_status=memo_data["review_status"],
+    ))
+
+    first_claim = assets["claims"][0]
+    subject.current_view = memo_data["current_conclusion"]
+    subject.confidence_level = first_claim["confidence_level"]
+    subject.evidence_strength = first_claim["evidence_strength"]
+    subject.last_view_updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(subject)
+    return await _build_workspace_response(subject, user, db)
 
 
 @router.post("/{subject_id}/claims", response_model=ResearchClaimResponse)

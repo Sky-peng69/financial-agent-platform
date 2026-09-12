@@ -48,6 +48,7 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [claimForm, setClaimForm] = useState({
@@ -175,6 +176,21 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleGenerateAssets() {
+    setGenerating(true);
+    setError("");
+    setMessage("");
+    try {
+      const updated = await researchSubjects.generateAssets(id);
+      setWorkspace(updated);
+      setMessage("已生成判断资产");
+    } catch (err: any) {
+      setError(err.message || "生成失败");
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -369,6 +385,13 @@ export default function ResearchSubjectWorkspacePage({ params }: { params: { id:
         </main>
 
         <aside className="space-y-4">
+          <section className="card p-5 animate-fade-up stagger-1">
+            <h2 className="text-[#111827] text-sm font-semibold mb-4">研究动作</h2>
+            <button className="btn-primary w-full text-sm" onClick={handleGenerateAssets} disabled={generating}>
+              {generating ? "生成中..." : "生成判断资产"}
+            </button>
+          </section>
+
           <section className="card p-5 animate-fade-up stagger-1">
             <h2 className="text-[#111827] text-sm font-semibold mb-4">材料归档</h2>
             <input

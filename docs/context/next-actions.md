@@ -2,29 +2,29 @@
 
 ## Unique Next Action
 
-把自动分析结果沉淀为公司研究对象下的结构化判断资产。
+为自动生成的判断资产补充显式证据引用关系和核验状态。
 
 ## Why This Is Next
 
-当前已经有公司研究驾驶舱和手工录入能力，但 AI 分析仍然主要保存在旧 `Task` 报告里。下一步应让模型输出进入 `Claim`、`Assumption`、`Challenge`、`DecisionMemo`，而不是只生成 Markdown。
+当前生成入口已经可以把材料分析结果写入 `Claim`、`Assumption`、`Challenge`、`DecisionMemo`。下一步要把每条判断和假设绑定到具体 `DocumentEvidence`，否则用户只能看到结论，不能快速复核“这条判断到底来自哪里”。
 
 ## Inputs Needed
 
-- `backend/app/services/orchestrator.py`
 - `backend/app/api/research_subjects.py`
 - `backend/app/models/__init__.py`
+- `backend/app/services/research_asset_generator.py`
 - `frontend/src/app/dashboard/research/[id]/page.tsx`
 
 ## Stop Condition
 
-- 用户可以在某个公司研究对象内触发一次分析。
-- 分析完成后至少生成一个判断、一个假设、一个反方挑战和一个备忘录。
-- 这些结构化对象能在公司研究驾驶舱中展示。
+- 每条自动生成的核心判断至少能关联 1 个 `DocumentEvidence`。
+- 驾驶舱可以让用户展开查看对应页码/片段，而不是暴露在主界面里。
+- 后端返回资产时包含核验状态：已引用、待核验或证据不足。
 
 ## Before Continuing Checklist
 
-- [ ] 已读取 current-state.md
-- [ ] 已读取 decision-log.md
-- [ ] 已读取 next-actions.md
-- [ ] 已检查冲突
-- [ ] 已确认下一步只做一件事
+- [x] 已读取 current-state.md
+- [x] 已读取 decision-log.md
+- [x] 已读取 next-actions.md
+- [x] 已检查冲突
+- [x] 已确认下一步只做一件事

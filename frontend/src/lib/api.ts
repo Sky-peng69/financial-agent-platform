@@ -467,6 +467,10 @@ export const researchSubjects = {
     }),
   workspace: (id: string) =>
     request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/workspace`),
+  generateAssets: (id: string) =>
+    request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/generate-assets`, {
+      method: "POST",
+    }),
   createClaim: (
     subjectId: string,
     data: {
