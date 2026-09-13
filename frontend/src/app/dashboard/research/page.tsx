@@ -12,7 +12,7 @@ const CONFIDENCE_LABELS: Record<string, string> = {
 };
 
 function confidenceLabel(value: string | null) {
-  if (!value) return "未定";
+  if (!value) return "";
   return CONFIDENCE_LABELS[value] || value;
 }
 
@@ -96,8 +96,29 @@ export default function ResearchSubjectsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
-        <section className="space-y-3 animate-fade-up stagger-1">
+      <div className="space-y-5">
+        <section className="card p-5 animate-fade-up stagger-1">
+          <h2 className="text-[#111827] text-sm font-semibold mb-4">新建研究对象</h2>
+          <form className="flex flex-col sm:flex-row gap-3" onSubmit={handleCreate}>
+            <div className="flex-1">
+              <label className="label">公司名称</label>
+              <input
+                className="input-field"
+                value={form.company_name}
+                onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                placeholder="例如：宁德时代"
+              />
+            </div>
+            <button
+              className="btn-primary w-full sm:w-auto sm:self-end text-sm h-[44px] px-5"
+              disabled={saving || !form.company_name.trim()}
+            >
+              {saving ? "创建中..." : "创建研究对象"}
+            </button>
+          </form>
+        </section>
+
+        <section className="space-y-3 animate-fade-up stagger-2">
           {subjects.length === 0 ? (
             <div className="card p-10 text-center">
               <p className="text-[#111827] text-sm font-semibold">暂无公司研究对象</p>
@@ -129,52 +150,22 @@ export default function ResearchSubjectsPage() {
                       {subject.current_view || "尚未形成当前判断"}
                     </p>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 md:w-[230px] shrink-0">
-                    <div className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-3 py-2">
-                      <p className="text-[#9CA3AF] text-[11px]">置信度</p>
-                      <p className="text-[#111827] text-sm font-semibold mt-1">
-                        {confidenceLabel(subject.confidence_level)}
-                      </p>
-                    </div>
-                    <div className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-3 py-2">
-                      <p className="text-[#9CA3AF] text-[11px]">证据</p>
-                      <p className="text-[#111827] text-sm font-semibold mt-1">
-                        {confidenceLabel(subject.evidence_strength)}
-                      </p>
-                    </div>
-                    <div className="bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-3 py-2">
-                      <p className="text-[#9CA3AF] text-[11px]">更新</p>
-                      <p className="text-[#111827] text-sm font-semibold mt-1">
-                        {formatDate(subject.updated_at)}
-                      </p>
-                    </div>
+                  <div className="flex flex-wrap md:justify-end gap-2 shrink-0">
+                    {subject.confidence_level && (
+                      <span className="badge-neutral">置信度 {confidenceLabel(subject.confidence_level)}</span>
+                    )}
+                    {subject.evidence_strength && (
+                      <span className="badge-neutral">证据 {confidenceLabel(subject.evidence_strength)}</span>
+                    )}
+                    <span className="text-[#9CA3AF] text-xs leading-7">
+                      更新 {formatDate(subject.updated_at)}
+                    </span>
                   </div>
                 </div>
               </Link>
             ))
           )}
         </section>
-
-        <aside className="card p-5 animate-fade-up stagger-2">
-          <h2 className="text-[#111827] text-sm font-semibold mb-4">新建研究对象</h2>
-          <form className="space-y-4" onSubmit={handleCreate}>
-            <div>
-              <label className="label">公司名称</label>
-              <input
-                className="input-field"
-                value={form.company_name}
-                onChange={(e) => setForm({ ...form, company_name: e.target.value })}
-                placeholder="例如：宁德时代"
-              />
-            </div>
-            <button
-              className="btn-primary w-full text-sm"
-              disabled={saving || !form.company_name.trim()}
-            >
-              {saving ? "创建中..." : "创建研究对象"}
-            </button>
-          </form>
-        </aside>
       </div>
     </div>
   );
