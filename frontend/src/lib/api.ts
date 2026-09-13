@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 class ApiError extends Error {
   status: number;
@@ -197,6 +197,7 @@ export const agents = {
   analyzeStream: (
     title: string,
     inputData: string,
+    options: { file_ids?: string[]; generate_report?: boolean } | null,
     callbacks: {
       onPhase: (phase: string, message: string) => void;
       onPlan: (plan: any) => void;
@@ -209,6 +210,7 @@ export const agents = {
         plan: any;
         subtask_results: any[];
         search_references: SearchReference[] | null;
+        report: ResearchReport | null;
       }) => void;
       onError: (err: Error) => void;
     },
@@ -228,7 +230,12 @@ export const agents = {
             "Content-Type": "application/json",
             ...(t ? { Authorization: `Bearer ${t}` } : {}),
           },
-          body: JSON.stringify({ title, input_data: inputData }),
+          body: JSON.stringify({
+            title,
+            input_data: inputData,
+            file_ids: options?.file_ids || [],
+            generate_report: options?.generate_report || false,
+          }),
           signal: controller.signal,
         });
 
@@ -282,6 +289,7 @@ export const agents = {
                     plan: event.plan,
                     subtask_results: event.subtask_results,
                     search_references: event.search_references || null,
+                    report: event.report || null,
                   });
                   break;
                 case "error":
@@ -343,6 +351,23 @@ export interface ResearchFile {
   content_type: string;
   size_bytes: number;
   status: "uploaded" | "parsed" | "failed";
+  created_at: string;
+}
+
+export interface ReportFile {
+  format: "docx" | "md" | "pdf" | string;
+  filename: string;
+  download_url: string;
+}
+
+export interface ResearchReport {
+  id: string;
+  research_subject_id: string | null;
+  task_id: string | null;
+  title: string;
+  report_style: string;
+  review_status: string;
+  files: ReportFile[];
   created_at: string;
 }
 
@@ -506,6 +531,114 @@ export const researchSubjects = {
     request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/generate-assets`, {
       method: "POST",
     }),
+  listReports: (id: string) =>
+    request<ResearchReport[]>(`/api/research-subjects/${id}/reports`),
+  startResearchStream: (
+    id: string,
+    data: { report_style: string; formats: string[] },
+    callbacks: {
+      onPhase: (phase: string, message: string) => void;
+      onPlan: (plan: any) => void;
+      onAgentStart: (agent: string, displayName: string, agentTitle: string) => void;
+      onAgentDone: (agent: string, displayName: string, status: string) => void;
+      onDone: (result: {
+        task_id: string;
+        output_data: string;
+        plan: any;
+        subtask_results: any[];
+        search_references: SearchReference[] | null;
+        report: ResearchReport | null;
+      }) => void;
+      onError: (err: Error) => void;
+    },
+  ): AbortController => {
+    const controller = new AbortController();
+    const t = token();
+    _activeStreamController?.abort();
+    _activeStreamController = controller;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/research-subjects/${id}/start-research-stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          },
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            window.location.replace("/login");
+          }
+          throw new ApiError("认证已过期，请重新登录", res.status);
+        }
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new ApiError(text || res.statusText, res.status);
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+          for (const part of parts) {
+            const line = part.replace(/^data: /, "").trim();
+            if (!line) continue;
+            try {
+              const event = JSON.parse(line);
+              switch (event.type) {
+                case "phase":
+                  if (event.plan) callbacks.onPlan(event.plan);
+                  callbacks.onPhase(event.phase, event.message);
+                  break;
+                case "agent_start":
+                  callbacks.onAgentStart(event.agent, event.display_name, event.title || "");
+                  break;
+                case "agent_done":
+                  callbacks.onAgentDone(event.agent, event.display_name, event.status);
+                  break;
+                case "done":
+                  callbacks.onDone({
+                    task_id: event.task_id,
+                    output_data: event.output_data,
+                    plan: event.plan,
+                    subtask_results: event.subtask_results,
+                    search_references: event.search_references || null,
+                    report: event.report || null,
+                  });
+                  break;
+                case "error":
+                  callbacks.onError(new Error(event.message));
+                  break;
+              }
+            } catch { /* skip parse errors */ }
+          }
+        }
+        _activeStreamController = null;
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          _activeStreamController = null;
+          return;
+        }
+        _activeStreamController = null;
+        callbacks.onError(err);
+      }
+    })();
+
+    return controller;
+  },
   createClaim: (
     subjectId: string,
     data: {

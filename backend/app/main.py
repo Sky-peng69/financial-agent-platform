@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="金融 Agent 平台",
-    description="多用户金融 AI Agent SaaS 平台 —— 银行员工和个人投资者的智能助手",
+    description="面向 A 股投研人员的金融 AI Agent 研究工作台",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -44,12 +44,14 @@ from app.api.agents import router as agents_router
 from app.api.tasks import router as tasks_router
 from app.api.files import router as files_router
 from app.api.research_subjects import router as research_subjects_router
+from app.api.reports import router as reports_router
 
 app.include_router(auth_router)
 app.include_router(agents_router)
 app.include_router(tasks_router)
 app.include_router(files_router)
 app.include_router(research_subjects_router)
+app.include_router(reports_router)
 
 
 @app.get("/health")

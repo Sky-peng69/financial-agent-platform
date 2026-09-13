@@ -55,6 +55,8 @@ class AnalyzeRequest(BaseModel):
     """百炼编排模式：只需提供标题和分析内容，Commander 自动分配 Agent"""
     title: str = Field(min_length=1, max_length=500)
     input_data: str | None = None
+    file_ids: list[str] = Field(default_factory=list)
+    generate_report: bool = False
 
 
 class AgentInfo(BaseModel):
@@ -251,3 +253,25 @@ class ResearchSubjectWorkspaceResponse(BaseModel):
     challenges: list[ResearchChallengeResponse]
     decision_memos: list[DecisionMemoResponse]
     evidence_count: int
+
+
+class ReportFileResponse(BaseModel):
+    format: str
+    filename: str
+    download_url: str
+
+
+class ResearchReportResponse(BaseModel):
+    id: str
+    research_subject_id: str | None = None
+    task_id: str | None = None
+    title: str
+    report_style: str
+    review_status: str
+    files: list[ReportFileResponse]
+    created_at: datetime
+
+
+class ResearchStartRequest(BaseModel):
+    report_style: str = Field(default="institutional", max_length=50)
+    formats: list[str] = Field(default_factory=lambda: ["docx", "md", "pdf"])

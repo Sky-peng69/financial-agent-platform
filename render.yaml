@@ -11,7 +11,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ENVIRONMENT
-        value: production
+        value: demo
       - key: DEBUG
         value: "false"
       - key: DATABASE_URL

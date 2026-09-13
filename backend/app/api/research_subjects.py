@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +28,23 @@ from app.schemas import (
     ResearchAssetReviewUpdate,
     ResearchChallengeCreate,
     ResearchChallengeResponse,
+    ResearchReportResponse,
+    ResearchStartRequest,
     ResearchClaimCreate,
     ResearchClaimResponse,
     ResearchSubjectCreate,
     ResearchSubjectResponse,
     ResearchSubjectWorkspaceResponse,
+)
+from app.models import ResearchReport
+from app.services.orchestrator import run_orchestrated_analysis_sse
+from app.services.report_builder import (
+    REPORT_STYLES,
+    build_report_prompt,
+    create_report_record,
+    normalize_formats,
+    normalize_report_style,
+    report_response,
 )
 from app.services.research_asset_generator import generate_research_assets
 
@@ -391,6 +404,81 @@ async def get_research_subject(
 ):
     subject = await _get_subject_for_user(subject_id, user, db)
     return ResearchSubjectResponse.model_validate(subject)
+
+
+@router.get("/{subject_id}/reports", response_model=list[ResearchReportResponse])
+async def list_subject_reports(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    result = await db.execute(
+        select(ResearchReport)
+        .where(ResearchReport.research_subject_id == subject.id)
+        .where(ResearchReport.user_id == user.id)
+        .order_by(desc(ResearchReport.created_at))
+    )
+    return [report_response(item) for item in result.scalars().all()]
+
+
+@router.post("/{subject_id}/start-research-stream")
+async def start_subject_research_stream(
+    subject_id: str,
+    data: ResearchStartRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    report_style = normalize_report_style(data.report_style)
+    formats = normalize_formats(data.formats)
+    style_label = REPORT_STYLES[report_style]["label"]
+    title = f"弈金-{subject.company_name}-{style_label}"
+    user_input = build_report_prompt(
+        title=title,
+        user_input=(
+            f"请对 A 股上市公司 {subject.company_name}"
+            f"{f'（{subject.ticker}）' if subject.ticker else ''} 进行自动联网研究。"
+            "请自行检索公开资料，不要求用户上传材料。"
+        ),
+        report_style=report_style,
+    )
+
+    async def event_stream():
+        async for event in run_orchestrated_analysis_sse(
+            user_input=user_input,
+            title=title,
+            user_id=user.id,
+            db=db,
+            file_ids=[],
+        ):
+            if event.get("type") == "done":
+                markdown = event.get("output_data") or ""
+                report = create_report_record(
+                    user=user,
+                    title=title,
+                    markdown=markdown,
+                    report_style=report_style,
+                    formats=formats,
+                    task_id=event.get("task_id"),
+                    research_subject_id=subject.id,
+                )
+                db.add(report)
+                subject.current_view = markdown[:1200]
+                subject.last_view_updated_at = datetime.now(timezone.utc)
+                await db.commit()
+                event["report"] = report_response(report)
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/{subject_id}/generate-assets", response_model=ResearchSubjectWorkspaceResponse)

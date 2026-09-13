@@ -11,6 +11,7 @@ from app.schemas import AgentInfo, TaskCreate, TaskResponse, AnalyzeRequest
 from app.api.deps import get_current_user
 from app.services.agent_runner import run_agent_stream, run_agent_sse
 from app.services.orchestrator import run_orchestrated_analysis, run_orchestrated_analysis_sse
+from app.services.report_builder import create_report_record, report_response
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -96,6 +97,7 @@ async def analyze(
         title=data.title,
         user_id=user.id,
         db=db,
+        file_ids=data.file_ids,
     )
     return TaskResponse.model_validate(task)
 
@@ -120,7 +122,20 @@ async def analyze_stream(
             title=data.title,
             user_id=user.id,
             db=db,
+            file_ids=data.file_ids,
         ):
+            if event.get("type") == "done" and data.generate_report:
+                report = create_report_record(
+                    user=user,
+                    title=data.title,
+                    markdown=event.get("output_data") or "",
+                    report_style="institutional",
+                    formats=["docx", "md", "pdf"],
+                    task_id=event.get("task_id"),
+                )
+                db.add(report)
+                await db.commit()
+                event["report"] = report_response(report)
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(

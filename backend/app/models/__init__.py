@@ -130,6 +130,22 @@ class ResearchFile(Base):
     )
 
 
+class ResearchReport(Base):
+    __tablename__ = "research_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    organization_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), nullable=True, index=True)
+    research_subject_id: Mapped[str | None] = mapped_column(ForeignKey("research_subjects.id"), nullable=True, index=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    report_style: Mapped[str] = mapped_column(String(50), nullable=False, default="institutional")
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    file_manifest: Mapped[str] = mapped_column(Text, nullable=False)
+    review_status: Mapped[str] = mapped_column(String(30), nullable=False, default="ai_draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class DocumentEvidence(Base):
     __tablename__ = "document_evidence"
 

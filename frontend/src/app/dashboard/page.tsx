@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import SearchReferences from "@/components/SearchReferences";
-import { agents as agentsApi, files as filesApi, tasks as tasksApi, type Agent, type ResearchFile, type Task, type SearchReference, parseSearchReferences } from "@/lib/api";
+import { API_URL, agents as agentsApi, files as filesApi, tasks as tasksApi, type Agent, type ResearchFile, type ResearchReport, type Task, type SearchReference } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -33,11 +33,6 @@ const SUGGESTED_PROMPTS = [
   "当前宏观经济形势研判及对A股市场影响",
 ];
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 interface AgentProgress {
   agent: string;
   displayName: string;
@@ -45,16 +40,46 @@ interface AgentProgress {
   status: "pending" | "running" | "completed" | "timeout" | "error";
 }
 
+function shouldGenerateReport(input: string) {
+  return /生成.*报告|导出|下载|word|docx|pdf|markdown|md|研报|研究报告/i.test(input);
+}
+
+function fileTypeLabel(format: string) {
+  if (format === "docx") return "Word";
+  if (format === "md") return "Markdown";
+  if (format === "pdf") return "PDF";
+  return format.toUpperCase();
+}
+
+function ReportDownloads({ report }: { report: ResearchReport }) {
+  return (
+    <div className="mt-5 pt-4 border-t border-[#E5E7EB]">
+      <p className="text-[#111827] text-sm font-semibold mb-3">报告文件</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {report.files.map((file) => (
+          <a
+            key={file.format}
+            href={`${API_URL}${file.download_url}`}
+            className="bg-white border border-[#E5E7EB] rounded-lg px-3 py-3 hover:border-[#2563EB]/40 hover:bg-[#EFF6FF] transition-colors"
+          >
+            <span className="text-[#2563EB] text-xs font-semibold">{fileTypeLabel(file.format)}</span>
+            <p className="text-[#374151] text-xs mt-1 truncate">{file.filename}</p>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [researchFiles, setResearchFiles] = useState<ResearchFile[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [fileError, setFileError] = useState("");
-  const [fileMessage, setFileMessage] = useState("");
+  const [attachments, setAttachments] = useState<ResearchFile[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState("");
 
   // Commander analyze state
   const [analyzeInput, setAnalyzeInput] = useState("");
@@ -66,8 +91,10 @@ export default function DashboardPage() {
   const [agentProgress, setAgentProgress] = useState<AgentProgress[]>([]);
   const [parsedPlan, setParsedPlan] = useState<any>(null);
   const [dashboardSearchRefs, setDashboardSearchRefs] = useState<SearchReference[] | null>(null);
+  const [dashboardReport, setDashboardReport] = useState<ResearchReport | null>(null);
   const [copied, setCopied] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   function handleCopy(text: string) {
     copyToClipboard(text).then((ok) => {
@@ -89,40 +116,32 @@ export default function DashboardPage() {
     Promise.all([
       agentsApi.list(),
       tasksApi.list(),
-      filesApi.list(),
-    ]).then(([a, t, f]) => {
+    ]).then(([a, t]) => {
       setAgents(a);
       setTasks(t);
-      setResearchFiles(f);
     }).catch(console.error).finally(() => setLoadingData(false));
   }, [user, loading, router]);
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAttachmentUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
 
-    setFileError("");
-    setFileMessage("");
+    setAttachmentError("");
 
-    if (file.type && file.type !== "application/pdf") {
-      setFileError("当前仅支持 PDF 文件");
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setFileError("当前仅支持 PDF 文件");
+    if (!/\.(pdf|docx|md|markdown)$/i.test(file.name)) {
+      setAttachmentError("当前仅支持 PDF、Word docx 和 Markdown 文件");
       return;
     }
 
-    setUploadingFile(true);
+    setUploadingAttachment(true);
     try {
       const uploaded = await filesApi.upload(file);
-      setResearchFiles((items) => [uploaded, ...items.filter((item) => item.id !== uploaded.id)]);
-      setFileMessage("PDF 已上传并解析完成");
+      setAttachments((items) => [...items.filter((item) => item.id !== uploaded.id), uploaded]);
     } catch (err: any) {
-      setFileError(err.message || "文件上传失败");
+      setAttachmentError(err.message || "文件上传失败");
     } finally {
-      setUploadingFile(false);
+      setUploadingAttachment(false);
     }
   }
 
@@ -135,6 +154,7 @@ export default function DashboardPage() {
     setAgentProgress([]);
     setParsedPlan(null);
     setDashboardSearchRefs(null);
+    setDashboardReport(null);
   }
 
   async function handleAnalyze() {
@@ -147,6 +167,10 @@ export default function DashboardPage() {
     abortRef.current = agentsApi.analyzeStream(
       analyzeInput.trim(),
       analyzeInput.trim(),
+      {
+        file_ids: attachments.map((item) => item.id),
+        generate_report: shouldGenerateReport(analyzeInput),
+      },
       {
         onPhase: (phase, message) => {
           setAnalyzePhase(phase);
@@ -173,6 +197,7 @@ export default function DashboardPage() {
           setAnalyzeLoading(false);
           setAnalyzePhase("");
           setDashboardSearchRefs(result.search_references);
+          setDashboardReport(result.report);
           setAnalyzeResult({
             id: result.task_id,
             agent_name: "commander",
@@ -185,6 +210,7 @@ export default function DashboardPage() {
             created_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
           });
+          setAttachments([]);
           // 设置 parsedPlan（如果还没设置）
           if (!parsedPlan && result.plan) {
             setParsedPlan({ plan: result.plan, subtask_results: result.subtask_results });
@@ -236,86 +262,6 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* PDF 材料 */}
-      <section className="mb-12 animate-fade-up stagger-1">
-        <div className="card p-6 sm:p-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
-            <div>
-              <p className="text-[#9CA3AF] text-xs mb-1 tracking-widest uppercase">Research Files</p>
-              <h2 className="text-[#111827] text-lg font-semibold">研究材料</h2>
-            </div>
-            <label className="btn-secondary cursor-pointer inline-flex items-center justify-center gap-2 text-sm">
-              {uploadingFile ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-[#6B7280]/20 border-t-[#6B7280] rounded-full animate-spin" />
-                  解析中...
-                </>
-              ) : (
-                <>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  上传 PDF
-                </>
-              )}
-              <input
-                className="hidden"
-                type="file"
-                accept="application/pdf,.pdf"
-                disabled={uploadingFile}
-                onChange={handleFileUpload}
-              />
-            </label>
-          </div>
-
-          {fileError && (
-            <div className="bg-[#FEF2F2] border border-[#DC2626]/20 text-[#DC2626] text-sm px-4 py-3 rounded-lg mb-4">
-              {fileError}
-            </div>
-          )}
-          {fileMessage && (
-            <div className="bg-[#ECFDF5] border border-[#059669]/20 text-[#059669] text-sm px-4 py-3 rounded-lg mb-4">
-              {fileMessage}
-            </div>
-          )}
-
-          {researchFiles.length === 0 ? (
-            <div className="bg-[#F8F9FB] border border-dashed border-[#D1D5DB] rounded-lg px-5 py-6 text-center">
-              <p className="text-[#6B7280] text-sm">暂无 PDF 材料</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {researchFiles.slice(0, 5).map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center justify-between gap-4 bg-[#F8F9FB] border border-[#E5E7EB] rounded-lg px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-[#111827] text-sm font-medium truncate">{file.original_name}</p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span className="text-[#9CA3AF] text-xs">{formatBytes(file.size_bytes)}</span>
-                      <span className="text-[#D1D5DB]">·</span>
-                      <span className="text-[#9CA3AF] text-xs">
-                        {new Date(file.created_at).toLocaleDateString("zh-CN")}
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${
-                      file.status === "parsed"
-                        ? "bg-[#ECFDF5] text-[#059669]"
-                        : file.status === "failed"
-                        ? "bg-[#FEF2F2] text-[#DC2626]"
-                        : "bg-[#F1F3F5] text-[#6B7280]"
-                    }`}
-                  >
-                    {file.status === "parsed" ? "已解析" : file.status === "failed" ? "失败" : "已上传"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* ======== Commander 智能分析入口 ======== */}
       <section className="mb-12 animate-fade-up stagger-2">
         <div className="card relative overflow-hidden">
@@ -333,31 +279,74 @@ export default function DashboardPage() {
               </h2>
             </div>
 
-            {/* Input + button row */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <textarea
-                className="input-field flex-1 min-h-[56px] resize-none text-sm"
-                placeholder="输入你的金融分析问题，AI 自动分配专家协作..."
-                value={analyzeInput}
-                onChange={(e) => setAnalyzeInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={analyzeLoading}
-                rows={2}
-              />
-              <button
-                className="btn-primary self-end sm:self-stretch flex items-center gap-2 whitespace-nowrap text-sm"
-                onClick={handleAnalyze}
-                disabled={analyzeLoading || !analyzeInput.trim()}
-              >
-                {analyzeLoading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    分析中...
-                  </>
-                ) : (
-                  "智能分析"
-                )}
-              </button>
+            {/* Input + attachment row */}
+            <div className="border border-[#E5E7EB] rounded-xl bg-white focus-within:border-[#2563EB]/50 transition-colors">
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-3 pt-3">
+                  {attachments.map((file) => (
+                    <span
+                      key={file.id}
+                      className="inline-flex items-center gap-2 max-w-full bg-[#F1F3F5] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5"
+                    >
+                      <span className="text-[#374151] text-xs truncate max-w-[220px]">{file.original_name}</span>
+                      <button
+                        className="text-[#9CA3AF] hover:text-[#DC2626] text-xs"
+                        onClick={() => setAttachments((items) => items.filter((item) => item.id !== file.id))}
+                        disabled={analyzeLoading}
+                        type="button"
+                      >
+                        移除
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {attachmentError && (
+                <p className="text-[#DC2626] text-xs px-3 pt-3">{attachmentError}</p>
+              )}
+              <div className="flex flex-col sm:flex-row gap-2 p-3">
+                <textarea
+                  className="flex-1 min-h-[58px] resize-none text-sm outline-none bg-transparent text-[#111827] placeholder:text-[#9CA3AF]"
+                  placeholder="输入你的金融分析问题，也可以添加本地附件..."
+                  value={analyzeInput}
+                  onChange={(e) => setAnalyzeInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={analyzeLoading}
+                  rows={2}
+                />
+                <div className="flex items-end gap-2">
+                  <input
+                    ref={attachmentInputRef}
+                    className="hidden"
+                    type="file"
+                    accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/markdown,.md,.markdown"
+                    disabled={uploadingAttachment || analyzeLoading}
+                    onChange={handleAttachmentUpload}
+                  />
+                  <button
+                    className="btn-secondary h-[40px] px-3 text-sm"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    disabled={uploadingAttachment || analyzeLoading}
+                    type="button"
+                  >
+                    {uploadingAttachment ? "解析中..." : "附件"}
+                  </button>
+                  <button
+                    className="btn-primary h-[40px] flex items-center gap-2 whitespace-nowrap text-sm"
+                    onClick={handleAnalyze}
+                    disabled={analyzeLoading || !analyzeInput.trim()}
+                  >
+                    {analyzeLoading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        分析中...
+                      </>
+                    ) : (
+                      "智能分析"
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Suggested prompts */}
@@ -569,6 +558,7 @@ export default function DashboardPage() {
                     <MarkdownRenderer content={analyzeResult.output_data} />
                     {/* Search references */}
                     <SearchReferences references={dashboardSearchRefs || []} />
+                    {dashboardReport && <ReportDownloads report={dashboardReport} />}
                     <div className="flex items-center gap-2 mt-5 pt-4 border-t border-[#E5E7EB]">
                       <button
                         onClick={() => handleCopy(analyzeResult.output_data || "")}

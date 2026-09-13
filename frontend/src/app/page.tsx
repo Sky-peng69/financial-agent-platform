@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/store";
 
 export default function Home() {
-  const { user, loading } = useAuth();
+  const { user, loading, demoLogin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -13,9 +13,11 @@ export default function Home() {
     if (user) {
       router.replace("/dashboard");
     } else {
-      router.replace("/login");
+      demoLogin()
+        .then(() => router.replace("/dashboard"))
+        .catch(() => router.replace("/login"));
     }
-  }, [user, loading, router]);
+  }, [user, loading, demoLogin, router]);
 
   // Loading spinner while checking auth
   return (

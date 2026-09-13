@@ -46,14 +46,20 @@ def _agent_display_name(agent_name: str) -> str:
     return info.display_name if info else agent_name
 
 
-async def _build_recent_file_context(db: AsyncSession, user_id: str) -> str:
-    """将用户最近上传的已解析材料作为隐式上下文，模拟对话附件体验。"""
+async def _build_file_context(
+    db: AsyncSession,
+    user_id: str,
+    file_ids: list[str] | None = None,
+) -> str:
+    """将本次请求明确携带的附件作为上下文。"""
+    if not file_ids:
+        return ""
+
     files_result = await db.execute(
         select(ResearchFile)
         .where(ResearchFile.user_id == user_id)
         .where(ResearchFile.status == FileStatus.PARSED)
-        .order_by(desc(ResearchFile.created_at))
-        .limit(MAX_ATTACHMENT_FILES)
+        .where(ResearchFile.id.in_(file_ids[:MAX_ATTACHMENT_FILES]))
     )
     files = files_result.scalars().all()
     if not files:
@@ -195,11 +201,12 @@ async def run_orchestrated_analysis(
     title: str,
     user_id: str,
     db: AsyncSession,
+    file_ids: list[str] | None = None,
 ) -> Task:
     """百炼模式：Commander 规划 → 并行执行 → 汇总报告"""
     analysis_input = _with_file_context(
         user_input,
-        await _build_recent_file_context(db, user_id),
+        await _build_file_context(db, user_id, file_ids),
     )
 
     # Phase 1: Commander 规划
@@ -300,6 +307,7 @@ async def run_orchestrated_analysis_sse(
     title: str,
     user_id: str,
     db: AsyncSession,
+    file_ids: list[str] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """
     SSE 流式版百炼编排：实时推送进度事件。
@@ -327,7 +335,7 @@ async def run_orchestrated_analysis_sse(
     try:
         analysis_input = _with_file_context(
             user_input,
-            await _build_recent_file_context(db, user_id),
+            await _build_file_context(db, user_id, file_ids),
         )
 
         # ═══ Phase 1: Commander 规划 ═══
