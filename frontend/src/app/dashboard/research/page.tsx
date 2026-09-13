@@ -28,11 +28,6 @@ export default function ResearchSubjectsPage() {
   const [error, setError] = useState("");
   const [form, setForm] = useState({
     company_name: "",
-    ticker: "",
-    industry: "",
-    current_view: "",
-    confidence_level: "medium",
-    evidence_strength: "medium",
   });
 
   function loadSubjects() {
@@ -57,11 +52,11 @@ export default function ResearchSubjectsPage() {
     try {
       const subject = await researchSubjects.create({
         company_name: form.company_name.trim(),
-        ticker: form.ticker.trim() || null,
-        industry: form.industry.trim() || null,
-        current_view: form.current_view.trim() || null,
-        confidence_level: form.confidence_level,
-        evidence_strength: form.evidence_strength,
+        ticker: null,
+        industry: null,
+        current_view: null,
+        confidence_level: null,
+        evidence_strength: null,
       });
       router.push(`/dashboard/research/${subject.id}`);
     } catch (err: any) {
@@ -171,61 +166,6 @@ export default function ResearchSubjectsPage() {
                 onChange={(e) => setForm({ ...form, company_name: e.target.value })}
                 placeholder="例如：宁德时代"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">股票代码</label>
-                <input
-                  className="input-field"
-                  value={form.ticker}
-                  onChange={(e) => setForm({ ...form, ticker: e.target.value })}
-                  placeholder="300750.SZ"
-                />
-              </div>
-              <div>
-                <label className="label">行业</label>
-                <input
-                  className="input-field"
-                  value={form.industry}
-                  onChange={(e) => setForm({ ...form, industry: e.target.value })}
-                  placeholder="电力设备"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="label">当前判断</label>
-              <textarea
-                className="input-field min-h-[96px] resize-none"
-                value={form.current_view}
-                onChange={(e) => setForm({ ...form, current_view: e.target.value })}
-                placeholder="例如：中性偏积极，等待储能回款质量进一步验证"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">置信度</label>
-                <select
-                  className="input-field"
-                  value={form.confidence_level}
-                  onChange={(e) => setForm({ ...form, confidence_level: e.target.value })}
-                >
-                  <option value="high">高</option>
-                  <option value="medium">中</option>
-                  <option value="low">低</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">证据强度</label>
-                <select
-                  className="input-field"
-                  value={form.evidence_strength}
-                  onChange={(e) => setForm({ ...form, evidence_strength: e.target.value })}
-                >
-                  <option value="high">强</option>
-                  <option value="medium">中</option>
-                  <option value="low">弱</option>
-                </select>
-              </div>
             </div>
             <button
               className="btn-primary w-full text-sm"
