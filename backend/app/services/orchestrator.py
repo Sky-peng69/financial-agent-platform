@@ -21,6 +21,7 @@ from app.agents.registry import (
 from app.models import DocumentEvidence, FileStatus, ResearchFile, Task, TaskStatus
 from app.services.llm import chat
 
+COMMANDER_TIMEOUT = 60
 SPECIALIST_TIMEOUT = 120  # 单个 Specialist 超时秒数
 MAX_ATTACHMENT_FILES = 3
 MAX_ATTACHMENT_CHARS_PER_FILE = 4000
@@ -148,6 +149,26 @@ async def plan_analysis(user_input: str) -> dict[str, Any]:
     return plan
 
 
+async def _plan_with_timeout(user_input: str) -> dict[str, Any]:
+    """Commander 规划超时后降级为单报告合成任务，避免前端长时间无进展。"""
+    try:
+        return await asyncio.wait_for(plan_analysis(user_input), timeout=COMMANDER_TIMEOUT)
+    except asyncio.TimeoutError:
+        return {
+            "analysis_type": "general",
+            "specialists_needed": ["report-synthesizer"],
+            "subtasks": [
+                {
+                    "agent": "report-synthesizer",
+                    "title": "综合分析",
+                    "prompt": user_input,
+                    "priority": 1,
+                }
+            ],
+            "synthesis_instruction": f"Commander 规划超时（>{COMMANDER_TIMEOUT}秒），直接生成高信号密度报告",
+        }
+
+
 # ============================================================
 # 2. Specialist：执行单个分析任务
 # ============================================================
@@ -210,7 +231,7 @@ async def run_orchestrated_analysis(
     )
 
     # Phase 1: Commander 规划
-    plan = await plan_analysis(analysis_input)
+    plan = await _plan_with_timeout(analysis_input)
     subtasks = plan.get("subtasks", [])
 
     # Phase 2: 并行执行所有 Specialist（不含 report-synthesizer）
@@ -272,7 +293,7 @@ async def run_orchestrated_analysis(
 6. 表格最多 3 张，只用于关键对比、证据清单或风险矩阵。
 7. 结尾保留“以上分析仅供参考，不构成投资建议”。"""
 
-        final_result = await run_specialist("report-synthesizer", final_prompt)
+        final_result = await _run_with_timeout("report-synthesizer", final_prompt)
         final_output = final_result["content"]
 
     # Phase 4: 保存到数据库
@@ -352,7 +373,7 @@ async def run_orchestrated_analysis_sse(
             "message": "AI Commander 正在理解问题、规划分析任务...",
         }
 
-        plan = await plan_analysis(analysis_input)
+        plan = await _plan_with_timeout(analysis_input)
         subtasks = plan.get("subtasks", [])
 
         execution_tasks = [
@@ -418,7 +439,7 @@ async def run_orchestrated_analysis_sse(
             final_output = "未能获取任何分析结果，请重试。"
         elif len(results) == 0 and synthesize_task:
             # 所有 subtask 都是 report-synthesizer，直接运行它
-            final_result = await run_specialist(
+            final_result = await _run_with_timeout(
                 "report-synthesizer",
                 synthesize_task["prompt"],
             )
@@ -455,7 +476,7 @@ async def run_orchestrated_analysis_sse(
 6. 表格最多 3 张，只用于关键对比、证据清单或风险矩阵。
 7. 结尾保留“以上分析仅供参考，不构成投资建议”。"""
 
-            final_result = await run_specialist("report-synthesizer", final_prompt)
+            final_result = await _run_with_timeout("report-synthesizer", final_prompt)
             final_output = final_result["content"]
 
         # ═══ Phase 4: 保存到数据库 ═══
@@ -487,6 +508,16 @@ async def run_orchestrated_analysis_sse(
             "search_references": all_search_refs if all_search_refs else None,
         }
 
+    except asyncio.CancelledError:
+        try:
+            task.status = TaskStatus.FAILED
+            task.error_message = "客户端连接中断，研究任务已停止"
+            task.completed_at = datetime.now(timezone.utc)
+            await _commit_with_retry(db)
+        except Exception:
+            pass
+        raise
+
     except Exception as e:
         # 异常：更新 failed Task，yield error
         try:
@@ -502,3 +533,13 @@ async def run_orchestrated_analysis_sse(
             "message": str(e),
             "task_id": task_id,
         }
+
+    finally:
+        if task.status == TaskStatus.RUNNING:
+            try:
+                task.status = TaskStatus.FAILED
+                task.error_message = "任务执行中断，已停止继续等待"
+                task.completed_at = datetime.now(timezone.utc)
+                await _commit_with_retry(db)
+            except Exception:
+                pass
