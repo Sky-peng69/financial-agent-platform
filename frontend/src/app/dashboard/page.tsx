@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import SearchReferences from "@/components/SearchReferences";
-import { API_URL, agents as agentsApi, files as filesApi, tasks as tasksApi, type Agent, type ResearchFile, type ResearchReport, type Task, type SearchReference } from "@/lib/api";
+import { agents as agentsApi, files as filesApi, reports as reportsApi, tasks as tasksApi, type Agent, type ResearchFile, type ResearchReport, type Task, type SearchReference } from "@/lib/api";
 import { useAuth } from "@/lib/store";
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -52,19 +52,26 @@ function fileTypeLabel(format: string) {
 }
 
 function ReportDownloads({ report }: { report: ResearchReport }) {
+  const handleDownload = (file: ResearchReport["files"][number]) => {
+    reportsApi.downloadFile(file).catch((err) => {
+      alert(err instanceof Error ? err.message : "下载失败，请稍后重试");
+    });
+  };
+
   return (
     <div className="mt-5 pt-4 border-t border-[#E5E7EB]">
       <p className="text-[#111827] text-sm font-semibold mb-3">报告文件</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {report.files.map((file) => (
-          <a
+          <button
             key={file.format}
-            href={`${API_URL}${file.download_url}`}
-            className="bg-white border border-[#E5E7EB] rounded-lg px-3 py-3 hover:border-[#2563EB]/40 hover:bg-[#EFF6FF] transition-colors"
+            type="button"
+            onClick={() => handleDownload(file)}
+            className="text-left bg-white border border-[#E5E7EB] rounded-lg px-3 py-3 hover:border-[#2563EB]/40 hover:bg-[#EFF6FF] transition-colors"
           >
             <span className="text-[#2563EB] text-xs font-semibold">{fileTypeLabel(file.format)}</span>
             <p className="text-[#374151] text-xs mt-1 truncate">{file.filename}</p>
-          </a>
+          </button>
         ))}
       </div>
     </div>

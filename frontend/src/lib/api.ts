@@ -371,6 +371,44 @@ export interface ResearchReport {
   created_at: string;
 }
 
+export const reports = {
+  downloadFile: async (file: ReportFile) => {
+    const t = token();
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${file.download_url}`, {
+        headers: {
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        },
+      });
+    } catch {
+      throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        window.location.replace("/login");
+      }
+      throw new ApiError("认证已过期，请重新登录", res.status);
+    }
+
+    if (!res.ok) {
+      throw new ApiError(await parseError(res), res.status);
+    }
+
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = file.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(href);
+  },
+};
+
 export const files = {
   list: () => request<ResearchFile[]>("/api/files"),
   upload: async (file: File, taskId?: string | null, researchSubjectId?: string | null) => {
