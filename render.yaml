@@ -18,10 +18,8 @@ services:
         fromDatabase:
           name: yijin-db
           property: connectionString
-      - key: REDIS_URL
-        value: redis://placeholder:6379/0
       - key: FRONTEND_URL
-        value: https://yijin-301.netlify.app
+        sync: false
     plan: free
 
 databases:
