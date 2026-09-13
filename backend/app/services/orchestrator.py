@@ -263,7 +263,14 @@ async def run_orchestrated_analysis(
 
 {reports_text}
 
-请按标准报告格式生成综合报告。"""
+请生成一份高信号密度的综合研究报告：
+1. 先给结论卡，再给依据、分析、风险与待核验。
+2. 合并重复观点，删除背景铺垫、通用常识和装饰性总结。
+3. 专家观点冲突时直接列出分歧，不强行调和。
+4. 关键数字保留来源状态；来源不足不得改写成确定事实。
+5. 每个章节只保留会改变结论的内容，全文控制在 1800-2800 个中文字符。
+6. 表格最多 3 张，只用于关键对比、证据清单或风险矩阵。
+7. 结尾保留“以上分析仅供参考，不构成投资建议”。"""
 
         final_result = await run_specialist("report-synthesizer", final_prompt)
         final_output = final_result["content"]
@@ -439,7 +446,14 @@ async def run_orchestrated_analysis_sse(
 
 {reports_text}
 
-请按标准报告格式生成综合报告。"""
+请生成一份高信号密度的综合研究报告：
+1. 先给结论卡，再给依据、分析、风险与待核验。
+2. 合并重复观点，删除背景铺垫、通用常识和装饰性总结。
+3. 专家观点冲突时直接列出分歧，不强行调和。
+4. 关键数字保留来源状态；来源不足不得改写成确定事实。
+5. 每个章节只保留会改变结论的内容，全文控制在 1800-2800 个中文字符。
+6. 表格最多 3 张，只用于关键对比、证据清单或风险矩阵。
+7. 结尾保留“以上分析仅供参考，不构成投资建议”。"""
 
             final_result = await run_specialist("report-synthesizer", final_prompt)
             final_output = final_result["content"]
