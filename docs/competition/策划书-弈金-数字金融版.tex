@@ -1,0 +1,1019 @@
+% ============================================================
+% 弈金 · 工行杯策划书 — Pandoc LaTeX 模板
+% 风格：投行研报风（深 Navy + 紫色强调 + PingFang SC）
+% ============================================================
+\PassOptionsToPackage{table,svgnames}{xcolor}
+\documentclass[a4paper,12pt,fontset=none]{ctexart}
+
+% ==================== 包加载（必须在所有配置之前）====================
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=2.8cm, bottom=2.5cm, headheight=32pt]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{calc, positioning, shapes, backgrounds, decorations.pathreplacing}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{framed}
+\usepackage{needspace}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{calc}
+
+% Pandoc 生成的表格使用 \real{...} 来缩放列宽，但该命令在某些 LaTeX
+% 发行版中不可用。这里定义为恒等映射，依赖现代 \dimexpr 的 * <decimal> 支持。
+\newcommand{\real}[1]{#1}
+
+% Pandoc 3.x 用 \pandocbounded 包裹代码块，需要在自定义模板中定义
+\newcommand{\pandocbounded}[1]{#1}
+
+\usepackage{ragged2e}
+\usepackage{parskip}
+\usepackage{letltxmacro}
+\usepackage{longtable}
+\usepackage{etoolbox}
+
+% ==================== 字体设置 ====================
+\setCJKmainfont{Hiragino Sans GB}
+\setmainfont{Hiragino Sans GB}
+\setmonofont{Menlo}[Scale=0.88]
+
+% ==================== 颜色定义 ====================
+\definecolor{deepnavy}{HTML}{1A2744}
+\colorlet{DEEPNAVY}{deepnavy}
+\definecolor{purple}{HTML}{6C5CE7}
+\colorlet{PURPLE}{purple}
+\definecolor{lightbluebg}{HTML}{EBF0F7}
+\definecolor{lightbluealt}{HTML}{F5F7FB}
+\definecolor{darkslate}{HTML}{2D3436}
+\definecolor{codetext}{HTML}{DFE6E9}
+\definecolor{tableheadbg}{HTML}{1A2744}
+\definecolor{tablerowalt}{HTML}{F0F3F8}
+\definecolor{quoteborder}{HTML}{6C5CE7}
+
+% ==================== 超链接 ====================
+\hypersetup{
+  colorlinks=true,
+  linkcolor=purple,
+  urlcolor=purple,
+  citecolor=purple,
+  pdfborder={0 0 0}
+}
+
+% ==================== 行距与段落 ====================
+\onehalfspacing
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+% ==================== 页眉页脚 ====================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\color{deepnavy}弈金 · 工行杯策划书}
+\fancyhead[R]{\footnotesize\color{deepnavy}\leftmark}
+\fancyfoot[C]{\footnotesize\color{deepnavy}—\ \thepage\ —}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{deepnavy!40}\leaders\hrule height \headrulewidth\hfill}}
+
+% ---- 首页样式（标题页之后重置）----
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[C]{\footnotesize\color{deepnavy}—\ \thepage\ —}
+}
+
+% ==================== 关闭自动编号（正文已含中文编号）====================
+\setcounter{secnumdepth}{0}
+
+% Pandoc 使用 \LTcaptype{none} 来禁止表格编号，需要定义 none 计数器
+\newcounter{none}
+
+% ==================== 章节标题样式 ====================
+\ctexset{
+  section = {
+    format = \LARGE\bfseries\color{deepnavy},
+    aftername = \hspace{0.5em},
+    beforeskip = 1.5em,
+    afterskip = 0.8em
+  },
+  subsection = {
+    format = \large\bfseries\color{deepnavy!90},
+    aftername = \hspace{0.4em},
+    beforeskip = 1.2em,
+    afterskip = 0.5em
+  },
+  subsubsection = {
+    format = \normalsize\bfseries\color{deepnavy!80},
+    aftername = \hspace{0.3em},
+    beforeskip = 0.8em,
+    afterskip = 0.3em
+  }
+}
+
+% ==================== Blockquote 样式（左侧 3px 紫色竖线）====================
+\LetLtxMacro{\oldquote}{\quote}
+\LetLtxMacro{\oldendquote}{\endquote}
+\renewenvironment{quote}{%
+  \vspace{0.3em}%
+  \def\FrameCommand{{\color{quoteborder}\vrule width 3pt}}%
+  \def\FirstFrameCommand{{\color{quoteborder}\vrule width 3pt}}%
+  \MakeFramed{\FrameRestore\noindent\ignorespaces}%
+  \small
+}{%
+  \endMakeFramed
+  \vspace{0.3em}%
+}
+
+% ==================== 代码块样式（暗 slate 背景 + 等宽字体）====================
+\lstset{
+  basicstyle=\small\ttfamily\color{codetext},
+  backgroundcolor=\color{darkslate},
+  frame=none,
+  framerule=0pt,
+  rulecolor=\color{darkslate},
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=false,
+  postbreak={\mbox{\textcolor{purple}{{$\hookrightarrow$}}}\space},
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  framesep=8pt,
+  framexleftmargin=8pt,
+  framexrightmargin=8pt,
+  escapeinside={}
+}
+
+% ==================== 表格与图片标题样式 ====================
+\captionsetup[table]{
+  font={small,color=deepnavy},
+  labelfont={bf,color=deepnavy},
+  skip=6pt
+}
+
+\captionsetup[figure]{
+  font={small,color=deepnavy!80},
+  labelfont={bf,color=deepnavy},
+  skip=6pt
+}
+
+% ==================== 列表样式 ====================
+\setlist[itemize]{nosep, leftmargin=*, itemsep=0.1em}
+\setlist[enumerate]{nosep, leftmargin=*, itemsep=0.1em}
+
+% ==================== 封面 TikZ 图案（左侧 Agent 网络节点）====================
+\newcommand{\covergeometry}{%
+  \begin{tikzpicture}[scale=0.15]
+    % 背景节点网络
+    \foreach \x in {0,8,...,80} {
+      \foreach \y in {0,12,...,120} {
+        \pgfmathsetmacro{\s}{random(0,100)}
+        \ifnum\s<18
+          \fill[white!10] (\x,\y) circle (0.6);
+        \fi
+        \ifnum\s<6
+          \fill[white!20] (\x,\y) circle (1.0);
+        \fi
+      }
+    }
+    % 连接线
+    \foreach \i in {1,...,25} {
+      \pgfmathsetmacro{\xa}{random(0,80)}
+      \pgfmathsetmacro{\ya}{random(0,120)}
+      \pgfmathsetmacro{\xb}{\xa + random(-20,20)}
+      \pgfmathsetmacro{\yb}{\ya + random(-25,25)}
+      \draw[white!8, line width=0.3] (\xa,\ya) -- (\xb,\yb);
+    }
+    % 亮点节点
+    \foreach \i in {1,...,8} {
+      \pgfmathsetmacro{\x}{random(10,70)}
+      \pgfmathsetmacro{\y}{random(15,105)}
+      \fill[white!30] (\x,\y) circle (2.0);
+      \draw[white!15, line width=0.5] (\x,\y) circle (3.5);
+    }
+  \end{tikzpicture}%
+}
+
+% ==================== 文档开始 ====================
+\begin{document}
+
+% Pandoc 用于紧凑列表的辅助命令
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}%
+  \setlength{\parskip}{0pt}%
+}
+
+% ==================== 封面 ====================
+\begin{titlepage}
+  \thispagestyle{empty}
+  \pagecolor{deepnavy}
+  \color{white}
+
+  \vspace*{\fill}
+
+  % 左侧几何图案区域
+  \begin{minipage}{0.28\textwidth}
+    \vspace{2cm}
+    \covergeometry
+  \end{minipage}
+  \hfill
+  % 右侧标题文字
+  \begin{minipage}{0.72\textwidth}
+    \raggedleft
+    \vspace{2cm}
+
+    {\fontsize{42}{50}\selectfont\bfseries 弈\ 金}
+
+    \vspace{0.8cm}
+
+    {\Large 面向银行投研场景的可追溯上市公司智能研究工作台}
+
+    \vspace{0.5cm}
+
+    \begin{tikzpicture}
+      \draw[white!60, line width=0.5] (0,0) -- (12,0);
+    \end{tikzpicture}
+
+    \vspace{0.8cm}
+
+    {\normalsize
+      \resizebox{\linewidth}{!}{第十七届“工行杯”全国大学生金融科技创新大赛}
+    }
+
+    \vspace{0.3cm}
+
+    {\normalsize 数字金融项目策划书}
+
+    \vspace{1.5cm}
+
+    {\small 2026 年 9 月}
+  \end{minipage}
+
+  \vspace*{\fill}
+
+  % 底部细线
+  \begin{tikzpicture}[remember picture, overlay]
+    \draw[white!40, line width=1.0] ($(current page.south west) + (2.5cm, 3.5cm)$) -- ($(current page.south east) + (-2.5cm, 3.5cm)$);
+    \node[white!50, font=\footnotesize] at ($(current page.south) + (0, 3.0cm)$) {让金融研究更快、更稳、更可核验};
+  \end{tikzpicture}
+\end{titlepage}
+
+% 恢复白色背景
+\pagecolor{white}
+\color{black}
+
+% ==================== 目录 ====================
+\renewcommand{\contentsname}{\centering\LARGE\color{deepnavy}\bfseries 目\quad 录}
+\tableofcontents
+\newpage
+
+% ==================== 正文开始 ====================
+
+\section{弈金：面向银行投研场景的可追溯上市公司智能研究工作台}\label{ux5f08ux91d1ux9762ux5411ux94f6ux884cux6295ux7814ux573aux666fux7684ux53efux8ffdux6eafux4e0aux5e02ux516cux53f8ux667aux80fdux7814ux7a76ux5de5ux4f5cux53f0}
+
+\subsection{项目摘要}\label{ux9879ux76eeux6458ux8981}
+
+弈金是一款面向工商银行内部研究、投研和资产管理人员的上市公司智能研究工作台。项目以数字金融为主参赛方向，围绕``上传材料---智能拆解---多角色分析---来源核验---人工复核---报告归档''的完整研究闭环，解决金融研究中资料分散、任务串行、专业方法难以复用、研究结论难以核验和知识难以沉淀等问题。
+
+在上市公司研究场景中，研究人员需要同时处理年报、公告、行业资料、政策信息、新闻和财务数据，并从行业、基本面、消息面、估值和风险等多个角度形成判断。传统方式高度依赖个人经验，资料搜集与整理耗时，研究过程难以复用；通用对话式人工智能又容易出现来源不清、数字口径不一致、过程不可追溯和责任边界不清的问题。
+
+弈金采用 Commander + Specialist 的任务编排方式。Commander
+负责理解研究目标、生成结构化任务图和安排依赖关系；行业、基本面、消息面、估值、风险等
+Specialist 按照专业分工并行或按依赖执行；Search Provider
+保存公开来源；共享质量协议核验引用、数字、计算、完整性和风险；报告合成师最终形成带来源、生成时间、风险提示和人工复核状态的研究报告草稿。
+
+项目不是重新训练一个通用金融大模型，而是建设金融模型、知识、材料和专业分工之间的应用层。工商银行公开信息显示，其已经围绕``领航AI+''行动、``工银智涌''金融大模型、企业知识工程、智能体协同和智能投研助手持续建设。弈金可以作为研究业务应用层的候选方案，与大型金融机构的模型底座和知识工程形成适配关系，而不是替代既有底座。
+
+项目当前已经具备 Web 工作台、Agent 注册与编排、SSE
+实时进度、公开网页检索、引用展示、任务历史和 Docker 部署等 MVP
+基础。后续将围绕结构化
+DAG、公开金融数据接入、质量评测、权限隔离和机构试点逐步推进。普通投资爱好者可以使用弈金进行公开资料研究辅助，但系统不提供个性化买卖指令，不自动交易，正式报告必须经过人工复核。
+
+\subsection{一
+项目概况与参赛定位}\label{ux4e00-ux9879ux76eeux6982ux51b5ux4e0eux53c2ux8d5bux5b9aux4f4d}
+
+\subsubsection{1.1 项目名称}\label{ux9879ux76eeux540dux79f0}
+
+项目名称：弈金。
+
+项目定位：面向银行投研场景的可追溯上市公司智能研究工作台。
+
+主参赛方向：数字金融。
+
+关联方向：金融安全、开放创新、智慧银行。
+
+\subsubsection{1.2 目标用户}\label{ux76eeux6807ux7528ux6237}
+
+主要用户为工商银行内部研究、投研和资产管理人员，核心需求是提高上市公司、行业和企业材料研究的效率与可核验性。
+
+普通投资爱好者是次级用户，使用范围限定为公开资料研究辅助，包括公司资料整理、行业信息理解、风险提示和来源查看。系统不根据个人资产、风险偏好和收益目标生成个性化买卖建议，也不代替用户作出投资决策。
+
+科技金融人员、证券公司和基金公司投研机构是扩展用户。未来可以将上市公司研究能力延伸到科技型企业尽调、行业研究、企业客户分析和机构研究协作等场景。
+
+\subsubsection{1.3 核心场景}\label{ux6838ux5fc3ux573aux666f}
+
+弈金的第一个核心场景是上市公司深度研究闭环。
+
+用户上传上市公司年报、公告或其他研究材料，输入``综合评估某公司的行业地位、基本面、估值与风险''等研究问题。系统自动生成任务图，分派行业、基本面、消息面、估值和风险
+Specialist，并行完成资料提取、公开信息补充和专业分析，最后合成研究报告草稿。
+
+这个场景同时体现了：
+
+\begin{itemize}
+\tightlist
+\item
+  金融研究的真实业务链条；
+\item
+  多 Agent 协作的必要性；
+\item
+  PDF 材料和公开信息的结合；
+\item
+  引用和数字核验的价值；
+\item
+  人工复核在金融场景中的必要性；
+\item
+  与工商银行智能研究方向的适配关系。
+\end{itemize}
+
+\subsubsection{1.4
+项目价值主张}\label{ux9879ux76eeux4ef7ux503cux4e3bux5f20}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+价值层次
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+解决的问题
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+产品回答
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+效率层 & 资料搜集、阅读、整理和报告初稿耗时 &
+自动解析材料、拆解任务、并行分析和生成草稿 \\
+质量层 & 数字、来源、计算和结论难以复核 &
+证据回链、数字核验、质量状态和待复核项 \\
+组织层 & 研究方法依赖个人，成果难以复用 & 统一 Agent
+方法、任务历史、权限隔离和知识沉淀 \\
+\end{longtable}
+}
+
+\subsection{二
+行业背景与项目必要性}\label{ux4e8c-ux884cux4e1aux80ccux666fux4e0eux9879ux76eeux5fc5ux8981ux6027}
+
+\subsubsection{2.1
+数字金融正在从工具数字化进入工作流智能化}\label{ux6570ux5b57ux91d1ux878dux6b63ux5728ux4eceux5de5ux5177ux6570ux5b57ux5316ux8fdbux5165ux5de5ux4f5cux6d41ux667aux80fdux5316}
+
+金融机构已经广泛建设数字渠道、数据平台和智能化基础设施。随着生成式人工智能和智能体技术发展，金融数字化的重点正在从``把线下流程搬到线上''转向``让系统理解任务、调用知识、组织工具并协助人员完成工作''。
+
+在研究业务中，单点工具只能解决某个环节。例如，搜索工具解决资料发现，文档工具解决内容提取，数据库解决指标查询，写作工具解决文字生成。研究人员仍然需要自己判断资料、安排分析顺序、比对口径、核对来源和合成结论。
+
+因此，下一阶段的数字金融产品需要解决的不只是``有没有一个 AI
+工具''，而是：
+
+\begin{itemize}
+\tightlist
+\item
+  业务任务如何被拆解；
+\item
+  数据和知识如何进入任务；
+\item
+  多个专业能力如何协同；
+\item
+  中间过程如何保存；
+\item
+  结果如何验证；
+\item
+  人员如何在关键环节接管。
+\end{itemize}
+
+\subsubsection{2.2
+工商银行已经进入金融智能体应用阶段}\label{ux5de5ux5546ux94f6ux884cux5df2ux7ecfux8fdbux5165ux91d1ux878dux667aux80fdux4f53ux5e94ux7528ux9636ux6bb5}
+
+工商银行 2025
+年度报告披露，集团实施``领航AI+''行动，建设``工银智涌''大模型技术体系，构建多模型融合的智能引擎和企业级知识工程体系，并探索多层次智能体协同框架。报告同时披露了投资交易场景中的智能投研助手，为市场洞察、策略研究和投资管理提供辅助。
+
+这说明工商银行的公开发展方向已经涵盖：
+
+\begin{itemize}
+\tightlist
+\item
+  金融大模型底座；
+\item
+  企业知识工程；
+\item
+  智能体协同；
+\item
+  投资研究辅助；
+\item
+  风险防控；
+\item
+  全链路安全防护。
+\end{itemize}
+
+弈金的机会不在于重复建设底层模型，而在于面向研究业务提供一个可验证的应用层工作流，将资料、任务、专业分析、证据和人工复核组织起来。
+
+\subsubsection{2.3
+金融人工智能需要同时满足效率与责任}\label{ux91d1ux878dux4ebaux5de5ux667aux80fdux9700ux8981ux540cux65f6ux6ee1ux8db3ux6548ux7387ux4e0eux8d23ux4efb}
+
+国家金融监督管理总局 2026
+年发布的银行业保险业人工智能安全开发应用指导意见提出，金融机构应建立人工智能应用的全生命周期管理体系，完善测评体系、知识工程和人机协同流程，明确系统和数据权限，落实责任追溯，并根据场景重要性和对客影响度实施风险分类分级管理。
+
+对弈金而言，这意味着金融 AI 产品不能只展示模型能力，还必须回答：
+
+\begin{itemize}
+\tightlist
+\item
+  模型使用了哪些数据；
+\item
+  数据是否来源可靠；
+\item
+  结论是否可以回到原始材料；
+\item
+  输出是否经过人工复核；
+\item
+  出错之后是否可以停止、重试或人工替代；
+\item
+  不同用户和机构之间是否隔离；
+\item
+  哪些内容只能作为草稿，不能直接作为正式金融结论。
+\end{itemize}
+
+\subsubsection{2.4 项目必要性}\label{ux9879ux76eeux5fc5ux8981ux6027}
+
+弈金的必要性不是因为``市场缺少一个 AI
+聊天工具''，而是因为金融研究业务存在以下结构性矛盾：
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+行业矛盾
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+具体表现
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+弈金的切入点
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+信息增长与人工处理能力有限 & 材料多、来源多、更新快 &
+统一材料与公开检索入口 \\
+多维研究与单人串行工作 & 行业、基本面、估值和风险需要同时分析 &
+Commander 调度 Specialist \\
+AI 生成效率与金融可信要求 & 结论流畅但来源、数字和口径可能不清 &
+共享引用和质量核验协议 \\
+机构知识积累与个人经验依赖 & 方法难复用，新人上手慢 & Agent
+方法论和任务归档 \\
+模型创新与金融责任边界 & 模型可以生成，但不能代替最终判断 &
+人工复核、风险提示和权限控制 \\
+\end{longtable}
+}
+
+\subsection{三
+金融研究业务链条与痛点分析}\label{ux4e09-ux91d1ux878dux7814ux7a76ux4e1aux52a1ux94feux6761ux4e0eux75dbux70b9ux5206ux6790}
+
+\subsubsection{3.1
+传统上市公司研究流程}\label{ux4f20ux7edfux4e0aux5e02ux516cux53f8ux7814ux7a76ux6d41ux7a0b}
+
+一项完整的上市公司研究通常包含以下步骤：
+
+提出研究问题 → 确定研究范围与资料清单 →
+搜集年报、公告、行业资料和公开信息 → 阅读长文档并提取关键事实 →
+分析行业和竞争格局 → 分析公司基本面与财务变化 → 补充消息面和政策变化 →
+建立估值与情景假设 → 识别风险与不确定事项 → 交叉验证并撰写报告 →
+合规复核与人工判断 → 归档和后续更新。
+
+这条链条的难点不在于某一个步骤特别复杂，而在于步骤之间相互依赖：资料选错会影响分析，口径不一致会影响计算，来源缺失会影响复核，前面任务的遗漏会在报告合成阶段集中暴露。
+
+\subsubsection{3.2
+痛点一：资料分散造成研究上下文断裂}\label{ux75dbux70b9ux4e00ux8d44ux6599ux5206ux6563ux9020ux6210ux7814ux7a76ux4e0aux4e0bux6587ux65adux88c2}
+
+研究人员需要在年报、公告、政策、新闻、研报和数据库之间反复切换。不同来源在时间、口径、单位和可信程度上存在差异，研究员必须自行完成筛选、整理和记录。
+
+这会产生三个后果：
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  搜索和搬运占用大量时间；
+\item
+  资料之间缺乏统一上下文；
+\item
+  后续复核时无法快速回到原始来源。
+\end{enumerate}
+
+弈金的产品要求是：上传材料、公开检索、文档分块、关键词检索、页码定位、来源保存和引用回链必须成为同一条流程。
+
+\subsubsection{3.3
+痛点二：专业研究天然需要协作，但工具通常是单线程}\label{ux75dbux70b9ux4e8cux4e13ux4e1aux7814ux7a76ux5929ux7136ux9700ux8981ux534fux4f5cux4f46ux5de5ux5177ux901aux5e38ux662fux5355ux7ebfux7a0b}
+
+行业、基本面、消息面、估值和风险是不同的专业任务。传统研究中，这些任务可能由不同人员负责，也可能由一名研究员依次完成；无论哪种方式，最终都需要重新整理中间结果、统一口径并解决结论冲突。
+
+通用聊天工具往往把复杂任务压缩成一篇回答，无法向用户解释：
+
+\begin{itemize}
+\tightlist
+\item
+  为什么需要这些分析维度；
+\item
+  哪些任务正在进行；
+\item
+  哪些结果依赖上游任务；
+\item
+  哪些专家结论互相矛盾；
+\item
+  哪个结论还缺少证据。
+\end{itemize}
+
+弈金使用 Commander + Specialist 将金融研究中的专业协作显式化。
+
+\subsubsection{3.4
+痛点三：关键数字和结论难以核验}\label{ux75dbux70b9ux4e09ux5173ux952eux6570ux5b57ux548cux7ed3ux8bbaux96beux4ee5ux6838ux9a8c}
+
+金融研究中的关键数字需要同时满足：
+
+\begin{itemize}
+\tightlist
+\item
+  数字准确；
+\item
+  统计期间明确；
+\item
+  单位明确；
+\item
+  口径明确；
+\item
+  来源明确；
+\item
+  计算过程可复现。
+\end{itemize}
+
+只提供一段文字或一个搜索摘要，不能满足这一要求。弈金需要区分原始数据、计算数据和模型判断，并在找不到可靠来源时标记``待核验''，而不是自动补全。
+
+\subsubsection{3.5
+痛点四：研究方法依赖个人，组织知识难沉淀}\label{ux75dbux70b9ux56dbux7814ux7a76ux65b9ux6cd5ux4f9dux8d56ux4e2aux4ebaux7ec4ux7ec7ux77e5ux8bc6ux96beux6c89ux6dc0}
+
+不同研究员可能使用不同的研究框架和报告结构。优秀研究员的分析方法往往没有被标准化，新人需要通过大量模仿和人工训练才能形成稳定产出。
+
+弈金将行业分析、基本面分析、估值、风险识别、引用核验和报告合成等方法拆成结构化
+Specialist 协议，使研究方法可以复用、评测和迭代。
+
+\subsubsection{3.6 痛点五：AI
+提升效率后，新的模型风险同步出现}\label{ux75dbux70b9ux4e94ai-ux63d0ux5347ux6548ux7387ux540eux65b0ux7684ux6a21ux578bux98ceux9669ux540cux6b65ux51faux73b0}
+
+AI 可能产生：
+
+\begin{itemize}
+\tightlist
+\item
+  虚构来源；
+\item
+  误读表格；
+\item
+  混淆时间期间；
+\item
+  混淆单位和币种；
+\item
+  把预测写成事实；
+\item
+  省略风险条件；
+\item
+  把不同来源的结论强行合并。
+\end{itemize}
+
+因此，金融 AI
+产品的核心竞争力不能只是生成速度，还必须包括结果边界和错误处理能力。弈金将``来源、数字、完整性、逻辑、格式和风险''作为统一质量协议的一部分。
+
+\subsection{四
+用户与应用场景}\label{ux56db-ux7528ux6237ux4e0eux5e94ux7528ux573aux666f}
+
+\subsubsection{4.1
+主要用户：银行研究与投研人员}\label{ux4e3bux8981ux7528ux6237ux94f6ux884cux7814ux7a76ux4e0eux6295ux7814ux4ebaux5458}
+
+主要用户负责行业研究、上市公司研究、投资分析、市场信息整理或研究报告生产。他们需要快速理解公司和行业，处理大量非结构化材料，获得最新公开信息，形成有证据的初步判断，跟踪报告和任务历史，并在不确定事项上保留人工判断。
+
+弈金替代的是资料搜集、初步整理和报告草拟中的重复劳动，不替代投研人员作出最终投资判断。
+
+\subsubsection{4.2
+次级用户：普通投资爱好者}\label{ux6b21ux7ea7ux7528ux6237ux666eux901aux6295ux8d44ux7231ux597dux8005}
+
+普通投资爱好者可以使用公开资料研究功能，完成公司公告和年报阅读、行业变化理解、来源查看、风险提示和个人研究笔记整理。
+
+产品边界是：不根据个人资产、风险偏好和收益目标提供个性化买卖指令；报告默认是
+AI 生成草稿；最终投资决策由用户自行承担。
+
+\subsubsection{4.3
+扩展用户：科技金融与外部投研机构}\label{ux6269ux5c55ux7528ux6237ux79d1ux6280ux91d1ux878dux4e0eux5916ux90e8ux6295ux7814ux673aux6784}
+
+科技金融人员可将研究能力延伸到科技型企业、产业链企业和公司客户材料分析，但不能直接用于自动授信审批或自动风险决策。证券公司和基金公司可以使用同一套研究工作流进行行业覆盖、公司研究和研究材料协作。
+
+这些是扩展方向，不改变当前首版围绕上市公司深度研究的产品边界。
+
+\subsection{五 产品方案}\label{ux4e94-ux4ea7ux54c1ux65b9ux6848}
+
+\subsubsection{5.1 产品闭环}\label{ux4ea7ux54c1ux95edux73af}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+阶段
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+用户动作
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+系统动作
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+结果
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+创建任务 & 填写公司、问题和范围，上传 PDF &
+建立用户、机构、任务和文件关系 & 研究任务与证据集合 \\
+智能规划 & 确认研究目标 & Commander 识别目标，生成任务图 &
+Agent、输入、输出和依赖关系 \\
+专业执行 & 查看任务进度 & Specialist 并行或按依赖执行 &
+行业、基本面、消息面、估值和风险分析 \\
+证据核验 & 点击来源与复核事项 & 保存 URL、标题、定位、获取时间和质量状态
+& 可回链证据 \\
+报告合成 & 修改、确认或退回草稿 & Report Synthesizer 处理冲突和失败状态
+& 结构化报告草稿 \\
+归档复用 & 查看历史任务与人工修改 & 持久化任务、来源和报告状态 &
+可回溯研究资产 \\
+\end{longtable}
+}
+
+\subsubsection{5.2 核心功能}\label{ux6838ux5fc3ux529fux80fd}
+
+\paragraph{智能研究指挥台}\label{ux667aux80fdux7814ux7a76ux6307ux6325ux53f0}
+
+用户用自然语言提出研究问题。Commander
+识别公司、研究目标、分析范围和所需专业维度，输出结构化任务图。简单任务可以使用单个
+Specialist，复杂任务自动拆分为多个并行任务。
+
+\paragraph{多 Specialist 协作}\label{ux591a-specialist-ux534fux4f5c}
+
+首版核心角色包括行业分析、基本面分析、消息面分析、估值与财务建模、风险分析和报告合成
+Specialist。不以 Agent
+数量作为产品卖点。只有当职责、输入、输出和评测标准明显不同时，才新增
+Specialist。
+
+\paragraph{PDF
+材料与公开信息结合}\label{pdf-ux6750ux6599ux4e0eux516cux5f00ux4fe1ux606fux7ed3ux5408}
+
+首版正式支持
+PDF。系统对材料进行文本提取、分块和关键词检索，并通过公开网页检索补充政策、公告和新闻信息。关键数字不能只依赖普通网页搜索或模型记忆；缺乏可靠证据时必须标记待核验。
+
+\paragraph{实时任务与后台执行}\label{ux5b9eux65f6ux4efbux52a1ux4e0eux540eux53f0ux6267ux884c}
+
+研究任务由后台 Worker 执行，前端通过 SSE
+或等效机制展示任务进度。用户刷新页面后可以恢复查看任务状态；失败任务需要记录原因，并支持有限重试、取消或人工接管。
+
+\paragraph{报告合成与人工复核}\label{ux62a5ux544aux5408ux6210ux4e0eux4ebaux5de5ux590dux6838}
+
+报告在线以 Markdown 展示，支持 PDF
+导出。导出内容包含来源、生成时间、风险提示和人工复核状态。未复核内容必须显示``AI
+生成草稿''。
+
+\subsubsection{5.3
+证据与质量协议}\label{ux8bc1ux636eux4e0eux8d28ux91cfux534fux8bae}
+
+每个 Specialist
+都遵循``读取任务与证据---生成分析---核验数字、计算和引用---检查完整性、逻辑、格式和风险---输出内容、证据、质量状态和待复核项''的协议。
+
+统一协议包括来源地址、标题、定位信息和获取时间；原始数据、计算数据和模型判断的区分；公式、输入数据和单位的记录；关键数字的来源核验；结论与证据之间的对应关系；失败、超时、冲突和跳过状态；人工复核事项和风险提示。
+
+\subsection{六
+工商银行数字金融适配}\label{ux516d-ux5de5ux5546ux94f6ux884cux6570ux5b57ux91d1ux878dux9002ux914d}
+
+\subsubsection{6.1
+与工商银行公开方向的关系}\label{ux4e0eux5de5ux5546ux94f6ux884cux516cux5f00ux65b9ux5411ux7684ux5173ux7cfb}
+
+工商银行公开材料显示，其已经围绕``工银智涌''建设金融大模型技术体系，推进企业知识工程和多层次智能体协同，并在投资交易场景建设智能投研助手。
+
+弈金的角色是研究业务应用层候选方案：
+
+\begin{itemize}
+\tightlist
+\item
+  不替代工商银行底层模型；
+\item
+  不宣称已经接入工商银行内部系统；
+\item
+  不使用工商银行非公开数据；
+\item
+  不宣称获得工商银行授权；
+\item
+  通过开放接口和 Provider 抽象预留未来适配空间。
+\end{itemize}
+
+\subsubsection{6.2
+智能投研场景}\label{ux667aux80fdux6295ux7814ux573aux666f}
+
+弈金可辅助研究人员完成上市公司和行业材料的资料整理、问题拆解、初步分析和报告草稿。研究人员仍然负责研究假设、关键判断、事实复核和最终发布。
+
+\subsubsection{6.3
+企业知识工程场景}\label{ux4f01ux4e1aux77e5ux8bc6ux5de5ux7a0bux573aux666f}
+
+弈金把用户上传材料、公开来源、任务过程、Agent
+输出和人工修改组织为有关系的研究资产。未来可以与机构知识库、专业 RAG
+库和内部研究方法结合，形成可更新、可共享的知识工程入口。
+
+\subsubsection{6.4
+金融安全场景}\label{ux91d1ux878dux5b89ux5168ux573aux666f}
+
+弈金把权限隔离、来源回链、数字核验、人工复核、风险提示和任务审计作为默认能力。对于直接影响客户利益、资金交易、授信审批或正式投资决策的高风险场景，系统只能作为辅助工具，必须经过机构准入、测评和人工监督。
+
+\subsection{七
+技术架构与创新点}\label{ux4e03-ux6280ux672fux67b6ux6784ux4e0eux521bux65b0ux70b9}
+
+\subsubsection{7.1 总体架构}\label{ux603bux4f53ux67b6ux6784}
+
+Web
+前端包括任务与文件界面、实时进度界面、报告与引用界面、人工复核与导出界面。API
+层负责认证、权限、文件、任务、Agent、工作流和 SSE 订阅。任务编排层负责
+Commander、DAG 调度、Specialist 执行和报告合成。质量与证据层负责 PDF
+解析、检索、引用核验、计算核验和报告审查。PostgreSQL、Redis、Worker
+和对象存储抽象提供持久化、队列和文件保存能力。
+
+\subsubsection{7.2 Provider 解耦}\label{provider-ux89e3ux8026}
+
+LLM Provider
+负责模型调用、流式输出、结构化输出、超时、重试、错误分类、Token
+统计和能力声明。Search Provider
+独立负责联网搜索、公开文件检索、来源保存、去重和获取时间记录。
+
+Agent、DAG 调度器和报告层不直接调用具体模型 SDK。这样可以在不修改 Agent
+编排逻辑的情况下替换模型，也能把模型能力和金融检索能力分开管理。
+
+\subsubsection{7.3 项目创新点}\label{ux9879ux76eeux521bux65b0ux70b9}
+
+\paragraph{研究流程创新}\label{ux7814ux7a76ux6d41ux7a0bux521bux65b0}
+
+将金融研究中的专业分工建模为 Commander +
+Specialist，使复杂研究任务可以拆分、并行和按依赖执行。
+
+\paragraph{证据链创新}\label{ux8bc1ux636eux94feux521bux65b0}
+
+将来源追溯、过程追溯和任务追溯统一起来，使用户可以从报告回到 Agent
+输出、从 Agent 输出回到来源和材料定位。
+
+\paragraph{金融知识工程创新}\label{ux91d1ux878dux77e5ux8bc6ux5de5ux7a0bux521bux65b0}
+
+将行业分析、基本面、估值、风险识别和报告合成中的方法和质量要求编码为可复用的
+Agent 协议，而不是依赖用户临时编写提示词。
+
+\paragraph{安全治理创新}\label{ux5b89ux5168ux6cbbux7406ux521bux65b0}
+
+将人工复核、风险提示、待核验状态、权限隔离和失败接管写入产品流程，不把安全作为部署完成后的附加功能。
+
+\subsection{八
+竞品与替代方案分析}\label{ux516b-ux7adeux54c1ux4e0eux66ffux4ee3ux65b9ux6848ux5206ux6790}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+对比维度
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+通用对话式 AI
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+传统金融终端
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+低代码 Agent 平台
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+弈金
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+主要价值 & 通用问答与写作 & 数据查询与专业终端 & 自定义搭建 Agent &
+金融研究工作流 \\
+研究分工 & 通常是一问一答 & 依赖人工组织 & 需要用户自行配置 & Commander
+自动拆解 \\
+材料处理 & 能力和格式不稳定 & 依赖已有数据和库 & 取决于配置 & PDF
+上传、检索和引用 \\
+证据能力 & 来源不稳定 & 数据较强但过程不一定沉淀 & 取决于配置 &
+来源、任务和过程统一留痕 \\
+人工复核 & 需要用户自行完成 & 由机构流程完成 & 需要自行设计 &
+产品内置复核状态和待复核项 \\
+部署方式 & 平台依赖较强 & 机构采购和部署 & 工程配置成本较高 & SaaS 与
+Docker 私有化方向 \\
+主要空白 & 不懂机构工作流 & 不负责智能协同 & 不提供开箱即用金融方法 &
+连接模型、材料、知识和业务人员 \\
+\end{longtable}
+}
+
+弈金不与传统金融数据库正面竞争，也不试图替代大型金融机构的底层模型。其定位是数据与模型之上的应用层编排和研究协作层。
+
+\subsection{九
+当前实现、验证证据与后续规划}\label{ux4e5d-ux5f53ux524dux5b9eux73b0ux9a8cux8bc1ux8bc1ux636eux4e0eux540eux7eedux89c4ux5212}
+
+\subsubsection{9.1 当前 MVP}\label{ux5f53ux524d-mvp}
+
+当前项目已经具备 Commander + Specialist 编排、Agent
+注册和提示词管理、SSE 实时流式输出、DeepSeek
+联网搜索、搜索引用持久化和展示、用户注册登录、任务历史、Web
+工作台、Docker Compose 一键部署以及 Markdown 报告展示和 PDF 导出方向。
+
+\subsubsection{9.2 当前边界}\label{ux5f53ux524dux8fb9ux754c}
+
+当前版本仍存在边界：
+
+\begin{itemize}
+\tightlist
+\item
+  结构化财务数据接口尚未纳入正式首版；
+\item
+  复杂表格抽取和 OCR 不属于当前首版；
+\item
+  Specialist 之间的完整链式依赖仍需继续完善；
+\item
+  后端自动化测试、权限测试和评测集需要补齐；
+\item
+  市场效率、用户满意度和商业转化指标尚未经过真实从业者长期验证。
+\end{itemize}
+
+项目不把``节省多少时间''写成已经验证的事实，而将其作为后续评测目标。
+
+\subsubsection{9.3 后续路线}\label{ux540eux7eedux8defux7ebf}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+阶段
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+重点任务
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+目标
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+阶段一 & 上市公司研究 MVP &
+跑通上传、检索、编排、核验、报告和人工复核 \\
+阶段二 & 可靠性增强 & 完善 DAG、重试、取消、恢复、质量检查和权限隔离 \\
+阶段三 & 数据与评测 & 接入公开结构化数据，建立 10---20 家 A
+股公司标准评测集 \\
+阶段四 & 金融机构试点 & 私有化部署、安全评估、业务适配和人工反馈闭环 \\
+阶段五 & 场景扩展 & 扩展科技金融企业研究和机构研究协作，不盲目增加
+Agent \\
+\end{longtable}
+}
+
+\subsection{十
+评测体系与验收指标}\label{ux5341-ux8bc4ux6d4bux4f53ux7cfbux4e0eux9a8cux6536ux6307ux6807}
+
+\subsubsection{10.1
+任务拆解评测}\label{ux4efbux52a1ux62c6ux89e3ux8bc4ux6d4b}
+
+评估 Commander 是否识别正确公司和研究目标，选择合法且必要的
+Specialist，生成完整的输入和输出字段，正确表达并行关系和依赖关系，并在简单任务中避免无必要的多
+Agent 调度。
+
+\subsubsection{10.2
+事实、数字与引用评测}\label{ux4e8bux5b9eux6570ux5b57ux4e0eux5f15ux7528ux8bc4ux6d4b}
+
+目标指标包括：
+
+\begin{itemize}
+\tightlist
+\item
+  关键数字可追溯率：目标 100\%；
+\item
+  引用覆盖率：目标不低于 90\%；
+\item
+  结构化输出成功率：目标不低于 95\%；
+\item
+  找不到可靠来源时的待核验标记率：目标 100\%。
+\end{itemize}
+
+\subsubsection{10.3
+工程可靠性评测}\label{ux5de5ux7a0bux53efux9760ux6027ux8bc4ux6d4b}
+
+评估任务成功率、失败原因记录完整度、有限重试、任务取消、断线恢复、越权读取防护、在线报告与导出报告一致性。
+
+\subsubsection{10.4
+人工价值评测}\label{ux4ebaux5de5ux4ef7ux503cux8bc4ux6d4b}
+
+记录单次任务耗时、人工修改段落数量、人工补充来源数量、人工发现的数字错误数量、研究员对可读性和可核验性的评价，以及哪些步骤仍然需要人工判断。
+
+\subsection{十一
+风险分析与合规边界}\label{ux5341ux4e00-ux98ceux9669ux5206ux6790ux4e0eux5408ux89c4ux8fb9ux754c}
+
+\subsubsection{11.1
+模型幻觉和引用失真}\label{ux6a21ux578bux5e7bux89c9ux548cux5f15ux7528ux5931ux771f}
+
+控制措施包括强制引用、关键数字核验、来源不可用时标记待核验、报告导出前人工复核、保存任务过程和失败状态。
+
+\subsubsection{11.2
+数据安全与权限风险}\label{ux6570ux636eux5b89ux5168ux4e0eux6743ux9650ux98ceux9669}
+
+控制措施包括任务、文件和报告绑定用户与机构；文件内容不能跨用户或跨机构返回；API
+Key、JWT
+密钥和数据库密码只通过环境变量注入；敏感信息不得写入普通日志；外部搜索和模型调用经过
+Provider 边界。
+
+\subsubsection{11.3
+金融误用风险}\label{ux91d1ux878dux8befux7528ux98ceux9669}
+
+弈金不自动执行交易，不生成个性化买卖指令，不把 AI
+草稿自动发布为正式金融结论。普通投资爱好者只能使用公开资料研究辅助；机构场景下，涉及投资决策、资产评估、授信审批和其他高风险业务时，必须经过机构准入、测评和人工监督。
+
+\subsubsection{11.4
+工商银行场景误读风险}\label{ux5de5ux5546ux94f6ux884cux573aux666fux8befux8bfbux98ceux9669}
+
+项目只使用工商银行公开披露的战略和技术方向进行适配分析。任何正式接入、试点、数据使用、模型调用和系统部署，都必须另行获得授权并完成安全评估。本文不代表工商银行官方立项、授权、合作或背书。
+
+\subsection{十二
+项目实施与资源规划}\label{ux5341ux4e8c-ux9879ux76eeux5b9eux65bdux4e0eux8d44ux6e90ux89c4ux5212}
+
+\subsubsection{12.1 团队协作}\label{ux56e2ux961fux534fux4f5c}
+
+项目至少需要覆盖产品与金融场景、后端与任务编排、前端与交互、数据评测与安全等职责。在学生团队资源有限的情况下，优先保证上市公司研究闭环，不同时展开理赔、财富管理、AML、自动交易等多个业务域。
+
+\subsubsection{12.2
+资源投入原则}\label{ux8d44ux6e90ux6295ux5165ux539fux5219}
+
+校赛阶段优先使用公开材料和公开数据源，以验证产品闭环。进入机构试点后，再根据数据等级、并发量、部署环境、安全测试和模型准入要求形成正式预算。
+
+不在项目早期用未经验证的市场规模、收益预测或客户数量替代产品可行性证明。
+
+\subsection{十三 结论}\label{ux5341ux4e09-ux7ed3ux8bba}
+
+弈金选择的不是``再做一个 AI
+聊天机器人''，而是一个清晰的数字金融应用问题：如何把金融研究从个人依赖、资料分散、串行执行和难以复核的工作方式，升级为任务可编排、证据可追溯、过程可审计、知识可沉淀的智能研究工作台。
+
+项目以工商银行内部研究和投研人员为主要用户，以上市公司深度研究为首个核心场景，普通投资爱好者和外部投研机构作为不同层级的扩展用户。它既能承接工商银行公开发展的智能投研、企业知识工程和智能体协同方向，又保留当前项目已有的
+PDF、公开检索、Agent 编排、引用展示和报告生成能力。
+
+项目的最终价值不在于让 AI 代替人作出金融判断，而在于让 AI
+负责资料组织、任务执行和研究初稿，让专业人员把时间集中到判断、复核和责任承担上。
+
+\subsection{附录
+参考资料与事实边界}\label{ux9644ux5f55-ux53c2ux8003ux8d44ux6599ux4e0eux4e8bux5b9eux8fb9ux754c}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  中国工商银行，《2025
+  年年度报告》，关于``领航AI+''行动、``工银智涌''、企业知识工程、智能体协同和智能投研助手的公开披露。\\
+  https://v.icbc.com.cn/userfiles/resources/icbcltd/download/2026/2025AnnualReportA.pdf
+\item
+  中国工商银行，《2025 年经营发展向新向优》。\\
+  https://www.icbc.com.cn/page/1211022925399216128.html
+\item
+  第十七届``工行杯''全国大学生金融科技创新大赛官方介绍。\\
+  https://www.gonghangbei.com/dsjs.html
+\item
+  ``工行杯''全国大学生金融科技创新大赛赛事指引。\\
+  https://www.gonghangbei.com/sszy.html
+\item
+  ``工行杯''全国大学生金融科技创新大赛往期作品。\\
+  https://www.gonghangbei.com/index/Lists/index.html?id=38
+\item
+  国家金融监督管理总局，《关于银行业保险业人工智能安全开发应用的指导意见》，金发〔2026〕8号。\\
+  https://policy.mofcom.gov.cn/claw/clawContent.shtml?id=106182
+\item
+  百度智能云，《智金金融智能体 ZHIJIN\_AGENT 产品介绍》。\\
+  https://cloud.baidu.com/doc/ZHIJIN\_AGENT/s/Hlvbxmg11
+\end{enumerate}
+
+事实边界：本文只使用公开资料。工商银行相关内容为公开方向下的场景适配分析，不代表工商银行授权、立项、合作或系统接入。项目中的效率指标、用户价值和商业化结果如未经过可复现实验或真实用户调研，均应视为目标或待验证假设。
+
+% ==================== 文档结束 ====================
+\end{document}

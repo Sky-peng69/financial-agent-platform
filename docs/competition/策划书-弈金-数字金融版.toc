@@ -1,0 +1,65 @@
+\contentsline {section}{弈金：面向银行投研场景的可追溯上市公司智能研究工作台}{3}{section*.2}%
+\contentsline {subsection}{项目摘要}{3}{subsection*.3}%
+\contentsline {subsection}{一 项目概况与参赛定位}{3}{subsection*.4}%
+\contentsline {subsubsection}{1.1 项目名称}{3}{subsubsection*.5}%
+\contentsline {subsubsection}{1.2 目标用户}{4}{subsubsection*.6}%
+\contentsline {subsubsection}{1.3 核心场景}{4}{subsubsection*.7}%
+\contentsline {subsubsection}{1.4 项目价值主张}{4}{subsubsection*.8}%
+\contentsline {subsection}{二 行业背景与项目必要性}{5}{subsection*.9}%
+\contentsline {subsubsection}{2.1 数字金融正在从工具数字化进入工作流智能化}{5}{subsubsection*.10}%
+\contentsline {subsubsection}{2.2 工商银行已经进入金融智能体应用阶段}{5}{subsubsection*.11}%
+\contentsline {subsubsection}{2.3 金融人工智能需要同时满足效率与责任}{5}{subsubsection*.12}%
+\contentsline {subsubsection}{2.4 项目必要性}{6}{subsubsection*.13}%
+\contentsline {subsection}{三 金融研究业务链条与痛点分析}{6}{subsection*.14}%
+\contentsline {subsubsection}{3.1 传统上市公司研究流程}{6}{subsubsection*.15}%
+\contentsline {subsubsection}{3.2 痛点一：资料分散造成研究上下文断裂}{7}{subsubsection*.16}%
+\contentsline {subsubsection}{3.3 痛点二：专业研究天然需要协作，但工具通常是单线程}{7}{subsubsection*.17}%
+\contentsline {subsubsection}{3.4 痛点三：关键数字和结论难以核验}{7}{subsubsection*.18}%
+\contentsline {subsubsection}{3.5 痛点四：研究方法依赖个人，组织知识难沉淀}{8}{subsubsection*.19}%
+\contentsline {subsubsection}{3.6 痛点五：AI 提升效率后，新的模型风险同步出现}{8}{subsubsection*.20}%
+\contentsline {subsection}{四 用户与应用场景}{8}{subsection*.21}%
+\contentsline {subsubsection}{4.1 主要用户：银行研究与投研人员}{8}{subsubsection*.22}%
+\contentsline {subsubsection}{4.2 次级用户：普通投资爱好者}{8}{subsubsection*.23}%
+\contentsline {subsubsection}{4.3 扩展用户：科技金融与外部投研机构}{9}{subsubsection*.24}%
+\contentsline {subsection}{五 产品方案}{9}{subsection*.25}%
+\contentsline {subsubsection}{5.1 产品闭环}{9}{subsubsection*.26}%
+\contentsline {subsubsection}{5.2 核心功能}{9}{subsubsection*.27}%
+\contentsline {paragraph}{智能研究指挥台}{9}{paragraph*.28}%
+\contentsline {paragraph}{多 Specialist 协作}{9}{paragraph*.29}%
+\contentsline {paragraph}{PDF 材料与公开信息结合}{10}{paragraph*.30}%
+\contentsline {paragraph}{实时任务与后台执行}{10}{paragraph*.31}%
+\contentsline {paragraph}{报告合成与人工复核}{10}{paragraph*.32}%
+\contentsline {subsubsection}{5.3 证据与质量协议}{10}{subsubsection*.33}%
+\contentsline {subsection}{六 工商银行数字金融适配}{10}{subsection*.34}%
+\contentsline {subsubsection}{6.1 与工商银行公开方向的关系}{10}{subsubsection*.35}%
+\contentsline {subsubsection}{6.2 智能投研场景}{10}{subsubsection*.36}%
+\contentsline {subsubsection}{6.3 企业知识工程场景}{11}{subsubsection*.37}%
+\contentsline {subsubsection}{6.4 金融安全场景}{11}{subsubsection*.38}%
+\contentsline {subsection}{七 技术架构与创新点}{11}{subsection*.39}%
+\contentsline {subsubsection}{7.1 总体架构}{11}{subsubsection*.40}%
+\contentsline {subsubsection}{7.2 Provider 解耦}{11}{subsubsection*.41}%
+\contentsline {subsubsection}{7.3 项目创新点}{11}{subsubsection*.42}%
+\contentsline {paragraph}{研究流程创新}{11}{paragraph*.43}%
+\contentsline {paragraph}{证据链创新}{11}{paragraph*.44}%
+\contentsline {paragraph}{金融知识工程创新}{11}{paragraph*.45}%
+\contentsline {paragraph}{安全治理创新}{12}{paragraph*.46}%
+\contentsline {subsection}{八 竞品与替代方案分析}{12}{subsection*.47}%
+\contentsline {subsection}{九 当前实现、验证证据与后续规划}{12}{subsection*.48}%
+\contentsline {subsubsection}{9.1 当前 MVP}{12}{subsubsection*.49}%
+\contentsline {subsubsection}{9.2 当前边界}{13}{subsubsection*.50}%
+\contentsline {subsubsection}{9.3 后续路线}{13}{subsubsection*.51}%
+\contentsline {subsection}{十 评测体系与验收指标}{13}{subsection*.52}%
+\contentsline {subsubsection}{10.1 任务拆解评测}{13}{subsubsection*.53}%
+\contentsline {subsubsection}{10.2 事实、数字与引用评测}{13}{subsubsection*.54}%
+\contentsline {subsubsection}{10.3 工程可靠性评测}{14}{subsubsection*.55}%
+\contentsline {subsubsection}{10.4 人工价值评测}{14}{subsubsection*.56}%
+\contentsline {subsection}{十一 风险分析与合规边界}{14}{subsection*.57}%
+\contentsline {subsubsection}{11.1 模型幻觉和引用失真}{14}{subsubsection*.58}%
+\contentsline {subsubsection}{11.2 数据安全与权限风险}{14}{subsubsection*.59}%
+\contentsline {subsubsection}{11.3 金融误用风险}{14}{subsubsection*.60}%
+\contentsline {subsubsection}{11.4 工商银行场景误读风险}{14}{subsubsection*.61}%
+\contentsline {subsection}{十二 项目实施与资源规划}{15}{subsection*.62}%
+\contentsline {subsubsection}{12.1 团队协作}{15}{subsubsection*.63}%
+\contentsline {subsubsection}{12.2 资源投入原则}{15}{subsubsection*.64}%
+\contentsline {subsection}{十三 结论}{15}{subsection*.65}%
+\contentsline {subsection}{附录 参考资料与事实边界}{15}{subsection*.66}%

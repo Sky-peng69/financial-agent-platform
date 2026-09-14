@@ -3,7 +3,7 @@
 % 风格：投行研报风（深 Navy + 紫色强调 + PingFang SC）
 % ============================================================
 \PassOptionsToPackage{table,svgnames}{xcolor}
-\documentclass[a4paper,12pt]{ctexart}
+\documentclass[a4paper,12pt,fontset=none]{ctexart}
 
 % ==================== 包加载（必须在所有配置之前）====================
 \usepackage[a4paper, left=2.5cm, right=2.5cm, top=2.8cm, bottom=2.5cm, headheight=32pt]{geometry}
@@ -39,11 +39,8 @@
 \usepackage{etoolbox}
 
 % ==================== 字体设置 ====================
-\setCJKmainfont{PingFang SC}[
-  BoldFont=PingFang SC Medium,
-  ItalicFont=PingFang SC Light
-]
-\setmainfont{PingFang SC}
+\setCJKmainfont{Hiragino Sans GB}
+\setmainfont{Hiragino Sans GB}
 \setmonofont{Menlo}[Scale=0.88]
 
 % ==================== 颜色定义 ====================
@@ -206,6 +203,12 @@
 % ==================== 文档开始 ====================
 \begin{document}
 
+% Pandoc 用于紧凑列表的辅助命令
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}%
+  \setlength{\parskip}{0pt}%
+}
+
 % ==================== 封面 ====================
 \begin{titlepage}
   \thispagestyle{empty}
@@ -229,7 +232,7 @@
 
     \vspace{0.8cm}
 
-    {\Large 基于多 Agent 协作的金融 AI 数字员工平台}
+    {\Large 面向银行投研场景的可追溯上市公司智能研究工作台}
 
     \vspace{0.5cm}
 
@@ -240,16 +243,16 @@
     \vspace{0.8cm}
 
     {\normalsize
-      \resizebox{\linewidth}{!}{第十七届"工行杯"全国大学生金融科技创新大赛}
+      \resizebox{\linewidth}{!}{第十七届“工行杯”全国大学生金融科技创新大赛}
     }
 
     \vspace{0.3cm}
 
-    {\normalsize 校赛策划书}
+    {\normalsize 数字金融项目策划书}
 
     \vspace{1.5cm}
 
-    {\small 2026 年 6 月}
+    {\small 2026 年 9 月}
   \end{minipage}
 
   \vspace*{\fill}
@@ -257,7 +260,7 @@
   % 底部细线
   \begin{tikzpicture}[remember picture, overlay]
     \draw[white!40, line width=1.0] ($$(current page.south west) + (2.5cm, 3.5cm)$$) -- ($$(current page.south east) + (-2.5cm, 3.5cm)$$);
-    \node[white!50, font=\footnotesize] at ($$(current page.south) + (0, 3.0cm)$$) {让 AI 从"一个聪明人"进化为"一支数字分析团队"};
+    \node[white!50, font=\footnotesize] at ($$(current page.south) + (0, 3.0cm)$$) {让金融研究更快、更稳、更可核验};
   \end{tikzpicture}
 \end{titlepage}
 
