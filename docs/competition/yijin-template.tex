@@ -83,19 +83,21 @@
 \renewcommand{\headrulewidth}{0.5pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{deepnavy!40}\leaders\hrule height \headrulewidth\hfill}}
 
-% 正文页的低对比度研究数据背景：只做氛围，不干扰阅读
+% 正文页背景图按叙事阶段切换：为什么做 → 解决什么 → 怎么实现
 \AddToHook{shipout/background}{%
-  \begin{tikzpicture}[remember picture, overlay]
-    \draw[deepnavy!5, line width=0.35pt] ($$(current page.north east)+(-2.15cm,-1.0cm)$$) -- ($$(current page.south east)+(-2.15cm,1.0cm)$$);
-    \draw[deepnavy!5, line width=0.35pt] ($$(current page.north east)+(-3.0cm,-1.0cm)$$) -- ($$(current page.south east)+(-3.0cm,1.0cm)$$);
-    \draw[deepnavy!5, line width=0.35pt] ($$(current page.north east)+(-4.0cm,-5.3cm)$$) -- ($$(current page.north east)+(-1.2cm,-5.3cm)$$);
-    \fill[icbcred!18] ($$(current page.north east)+(-2.15cm,-5.3cm)$$) circle (0.07cm);
-    \fill[icbcgold!28] ($$(current page.north east)+(-3.0cm,-8.2cm)$$) circle (0.05cm);
-    % 研究档案卡片：来源、模型、人工复核三层留痕
-    \draw[deepnavy!7, line width=0.45pt] ($$(current page.north east)+(-3.55cm,-5.0cm)$$) rectangle ($$(current page.north east)+(-1.35cm,-3.65cm)$$);
-    \draw[icbcgold!14, line width=0.45pt] ($$(current page.north east)+(-3.35cm,-7.0cm)$$) rectangle ($$(current page.north east)+(-1.25cm,-5.7cm)$$);
-    \draw[icbcred!13, line width=0.45pt] ($$(current page.north east)+(-3.15cm,-9.0cm)$$) rectangle ($$(current page.north east)+(-1.45cm,-7.75cm)$$);
-  \end{tikzpicture}%
+  \ifnum\value{page}>2
+    \begin{tikzpicture}[remember picture, overlay]
+      \ifnum\value{page}<5
+        \node[anchor=north east, inner sep=0pt] at (current page.north east) {\includegraphics[height=\paperheight]{assets/body-background-icbc-ai-pdf.png}};
+      \else
+        \ifnum\value{page}<9
+          \node[anchor=north east, inner sep=0pt] at (current page.north east) {\includegraphics[height=\paperheight]{assets/body-background-research-evidence-pdf.png}};
+        \else
+          \node[anchor=north east, inner sep=0pt] at (current page.north east) {\includegraphics[height=\paperheight]{assets/body-background-ai-orchestration-pdf.png}};
+        \fi
+      \fi
+    \end{tikzpicture}%
+  \fi
 }
 
 % ---- 首页样式（标题页之后重置）----
