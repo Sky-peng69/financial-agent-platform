@@ -46,6 +46,10 @@
 % ==================== 颜色定义 ====================
 \definecolor{deepnavy}{HTML}{1A2744}
 \colorlet{DEEPNAVY}{deepnavy}
+\definecolor{icbcred}{HTML}{C8102E}
+\definecolor{icbcdarkred}{HTML}{8F1028}
+\definecolor{icbcgold}{HTML}{B58A45}
+\definecolor{warmwhite}{HTML}{FBFAF7}
 \definecolor{purple}{HTML}{6C5CE7}
 \colorlet{PURPLE}{purple}
 \definecolor{lightbluebg}{HTML}{EBF0F7}
@@ -212,55 +216,69 @@
 % ==================== 封面 ====================
 \begin{titlepage}
   \thispagestyle{empty}
-  \pagecolor{deepnavy}
-  \color{white}
+  \pagecolor{warmwhite}
+  \color{deepnavy}
 
-  \vspace*{\fill}
+  % 工行红竖向识别带与金色边界线
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[icbcred] (current page.north west) rectangle ($(current page.south west)+(1.35cm,0)$);
+    \fill[icbcdarkred] ($(current page.north west)+(1.35cm,0)$) rectangle ($(current page.south west)+(1.48cm,0)$);
+    \draw[icbcgold, line width=1.2pt] ($(current page.north west)+(2.25cm,-2.05cm)$) -- ($(current page.north east)+(-2.25cm,-2.05cm)$);
+    \draw[icbcgold, line width=1.2pt] ($(current page.south west)+(2.25cm,2.05cm)$) -- ($(current page.south east)+(-2.25cm,2.05cm)$);
+    % 研究数据网格：表达“数据—证据—决策”的连接
+    \foreach \x in {11,13,15,17} {
+      \draw[deepnavy!10, line width=0.4pt] (\x cm,3.0cm) -- (\x cm,18.0cm);
+    }
+    \foreach \y in {5,7,9,11,13,15,17} {
+      \draw[deepnavy!10, line width=0.4pt] (3.0cm,\y cm) -- (18.0cm,\y cm);
+    }
+    \fill[icbcred] (16.8cm,17.2cm) circle (0.16cm);
+    \fill[icbcgold] (14.4cm,13.0cm) circle (0.12cm);
+    \fill[deepnavy] (17.6cm,9.0cm) circle (0.10cm);
+    \draw[icbcred, line width=1.1pt] (14.4cm,13.0cm) -- (16.8cm,17.2cm) -- (17.6cm,9.0cm);
+  \end{tikzpicture}
 
-  % 左侧几何图案区域
-  \begin{minipage}{0.28\textwidth}
-    \vspace{2cm}
-    \covergeometry
-  \end{minipage}
-  \hfill
-  % 右侧标题文字
-  \begin{minipage}{0.72\textwidth}
-    \raggedleft
-    \vspace{2cm}
+  \vspace*{2.0cm}
+  \hspace*{1.0cm}
+  \begin{minipage}{0.86\textwidth}
+    \raggedright
+    {\small\color{icbcred}\bfseries 第十七届“工行杯”全国大学生金融科技创新大赛}
 
-    {\fontsize{42}{50}\selectfont\bfseries 弈\ 金}
+    \vspace{0.55cm}
+    {\fontsize{48}{56}\selectfont\bfseries 弈金}
 
-    \vspace{0.8cm}
+    \vspace{0.12cm}
+    {\large\color{icbcred}\bfseries DIGITAL FINANCE / RESEARCH WORKBENCH}
 
-    {\Large 面向银行投研场景的可追溯上市公司智能研究工作台}
+    \vspace{1.0cm}
+    {\fontsize{25}{35}\selectfont\bfseries 面向银行投研场景的\par}
+    \vspace{0.15cm}
+    {\fontsize{25}{35}\selectfont\bfseries 可追溯上市公司智能研究工作台}
 
-    \vspace{0.5cm}
-
+    \vspace{0.85cm}
     \begin{tikzpicture}
-      \draw[white!60, line width=0.5] (0,0) -- (12,0);
+      \fill[icbcred] (0,0) rectangle (1.4cm,0.12cm);
+      \fill[icbcgold] (1.55cm,0) rectangle (5.2cm,0.12cm);
     \end{tikzpicture}
 
     \vspace{0.8cm}
+    {\large\color{deepnavy!75} 数字金融项目策划书}
 
-    {\normalsize
-      \resizebox{\linewidth}{!}{第十七届“工行杯”全国大学生金融科技创新大赛}
-    }
+    \vfill
 
-    \vspace{0.3cm}
+    \begin{minipage}{0.72\textwidth}
+      \small\color{deepnavy!75}
+      \textbf{核心命题}\quad 把资料搜集、专业分析、证据核验与人工复核\par
+      组织成一条可追溯、可复用、可审查的金融研究工作流。
+    \end{minipage}
 
-    {\normalsize 数字金融项目策划书}
-
-    \vspace{1.5cm}
-
-    {\small 2026 年 9 月}
+    \vspace{1.0cm}
+    {\small\color{icbcred}\bfseries 2026 年 9 月}
   \end{minipage}
 
-  \vspace*{\fill}
-
-  % 底部细线
   \begin{tikzpicture}[remember picture, overlay]
-    \draw[white!40, line width=1.0] ($(current page.south west) + (2.5cm, 3.5cm)$) -- ($(current page.south east) + (-2.5cm, 3.5cm)$);
-    \node[white!50, font=\footnotesize] at ($(current page.south) + (0, 3.0cm)$) {让金融研究更快、更稳、更可核验};
+    \node[anchor=south west, font=\footnotesize\color{deepnavy!60}] at ($(current page.south west)+(2.25cm,2.45cm)$) {让金融研究更快、更稳、更可核验};
+    \node[anchor=south east, font=\footnotesize\color{deepnavy!45}] at ($(current page.south east)+(-2.25cm,2.45cm)$) {YIJIN / 2026};
   \end{tikzpicture}
 \end{titlepage}
 
