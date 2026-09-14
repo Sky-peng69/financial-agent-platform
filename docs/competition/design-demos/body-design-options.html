@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>弈金正文视觉方向</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --paper:#faf9f6; --navy:#18243f; --red:#c21230; --gold:#b1853b; --muted:#687083; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#deddd8; color:var(--navy); font-family:"Songti SC","STSong",serif; }
+  .board { display:flex; gap:24px; padding:28px; min-height:100vh; align-items:flex-start; }
+  .variant { width:794px; flex:0 0 794px; }
+  .label { font:600 14px/1.2 Arial,sans-serif; letter-spacing:.08em; color:var(--navy); margin:0 0 10px 14px; }
+  .page { width:794px; height:1123px; background:var(--paper); position:relative; overflow:hidden; padding:92px 78px 80px; box-shadow:0 8px 30px #0002; }
+  .header { position:absolute; top:34px; left:78px; right:78px; border-bottom:1px solid #18243f35; padding-bottom:12px; font:12px/1.2 Arial,sans-serif; color:#566074; display:flex; justify-content:space-between; }
+  .footer { position:absolute; bottom:35px; left:78px; right:78px; border-top:1px solid #b1853b99; padding-top:10px; display:flex; justify-content:space-between; color:#6a7280; font:11px Arial,sans-serif; }
+  h1 { font-size:34px; line-height:1.25; margin:0 0 28px; letter-spacing:-.04em; }
+  h2 { font-size:22px; line-height:1.35; margin:27px 0 12px; }
+  h3 { font-size:16px; margin:22px 0 9px; }
+  p, li { font-size:14px; line-height:1.9; color:#303745; }
+  p { margin:0 0 12px; }
+  ul { margin:8px 0 0; padding-left:23px; }
+  .eyebrow { color:var(--red); font:600 12px/1.2 Arial,sans-serif; letter-spacing:.12em; margin-bottom:14px; }
+  .line { display:flex; align-items:center; gap:9px; margin-bottom:22px; }
+  .line i { display:block; height:3px; background:var(--red); width:48px; }
+  .line b { display:block; height:1px; background:var(--gold); flex:1; }
+  .callout { margin:18px 0; padding:15px 18px; border-left:4px solid var(--red); background:#c2123008; color:#303745; font-size:14px; line-height:1.8; }
+  .watermark { position:absolute; color:#18243f08; font:700 220px/1 Arial,sans-serif; pointer-events:none; }
+
+  /* A: research dossier */
+  .a .page:before { content:""; position:absolute; left:0; top:0; bottom:0; width:16px; background:var(--navy); box-shadow:5px 0 var(--red); }
+  .a .page:after { content:"SOURCE → ANALYSIS → REVIEW"; position:absolute; right:74px; bottom:66px; color:#18243f66; font:11px Arial,sans-serif; letter-spacing:.04em; }
+  .a .watermark { right:60px; top:250px; transform:rotate(90deg); font-size:120px; }
+  .a .stack { position:absolute; right:60px; top:170px; width:155px; height:260px; opacity:.65; }
+  .a .stack span { position:absolute; right:0; width:150px; height:94px; border:1px solid #18243f35; border-radius:8px; background:#fff8; }
+  .a .stack span:nth-child(1){top:0}.a .stack span:nth-child(2){top:92px;border-color:#b1853b66}.a .stack span:nth-child(3){top:184px;border-color:#c2123055}
+  .a .stack span:after { content:""; position:absolute; left:18px; right:18px; top:25px; height:38px; border-top:2px solid #18243f25; border-bottom:2px solid #18243f18; }
+
+  /* B: index system */
+  .b .page:before { content:""; position:absolute; left:0; top:0; bottom:0; width:34px; background:var(--red); box-shadow:5px 0 var(--gold); }
+  .b .index { position:absolute; right:72px; top:180px; bottom:150px; width:35px; border-left:1px solid #18243f35; }
+  .b .index:before { content:""; position:absolute; top:0; left:-7px; width:13px; height:13px; border-radius:50%; background:var(--gold); box-shadow:0 110px var(--gold),0 220px var(--gold),0 330px var(--gold),0 440px var(--gold); }
+  .b .watermark { left:86px; top:110px; font-size:88px; }
+  .b .chapter { position:absolute; right:70px; top:92px; font:12px Arial,sans-serif; color:var(--red); letter-spacing:.1em; writing-mode:vertical-rl; }
+  .b .mini-rule { width:58px; height:3px; background:var(--red); margin:8px 0 18px; }
+
+  /* C: evidence stamp */
+  .c .page:before { content:""; position:absolute; right:-85px; bottom:130px; width:430px; height:430px; border:1px solid #18243f16; border-radius:50%; box-shadow:0 0 0 38px #b1853b0d,0 0 0 76px #c2123008; }
+  .c .page:after { content:""; position:absolute; right:95px; bottom:315px; width:125px; height:4px; background:var(--red); transform:rotate(-32deg); }
+  .c .stamp { position:absolute; right:112px; bottom:214px; width:150px; height:150px; border:2px solid #c2123050; border-radius:50%; color:#c2123090; display:flex; align-items:center; justify-content:center; text-align:center; font:600 12px/1.45 Arial,sans-serif; transform:rotate(-14deg); }
+  .c .watermark { right:36px; top:205px; font-size:160px; writing-mode:vertical-rl; }
+  .c .risk { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; }
+  .c .risk div { border-top:2px solid var(--gold); padding-top:7px; color:#596274; font:12px/1.5 Arial,sans-serif; }
+</style>
+</head>
+<body>
+<main class="board">
+  <section class="variant a">
+    <div class="label">A · RESEARCH DOSSIER / 推荐</div>
+    <article class="page">
+      <div class="header"><span>弈金 · 工行杯策划书</span><span>面向银行投研场景的可追溯上市公司智能研究工作台</span></div>
+      <div class="watermark">01</div><div class="stack"><span></span><span></span><span></span></div>
+      <div class="eyebrow">PROJECT NECESSITY</div><h1>二、行业背景与项目必要性</h1><div class="line"><i></i><b></b></div>
+      <h2>2.1 数字金融正在进入工作流智能化阶段</h2>
+      <p>金融机构已经广泛建设数字渠道、数据平台和智能化基础设施。随着生成式人工智能和智能体技术发展，数字化重点正在从“把线下流程搬到线上”转向“让系统理解任务、调用知识、组织工具并协助人员完成工作”。</p>
+      <p>在研究业务中，搜索、文档处理、数据查询和写作工具分别解决单个环节，研究人员仍需自行判断资料、安排顺序、比对口径、核对来源并合成结论。</p>
+      <div class="callout"><b>核心判断</b>　弈金不是把聊天搬进金融，而是把资料、任务、证据与人工判断组织成一条可追溯的研究工作流。</div>
+      <h2>2.2 工商银行已经进入金融智能体应用阶段</h2>
+      <p>工商银行公开材料显示，其正在推进金融大模型、企业知识工程、多层次智能体协同和智能投研助手。弈金的切入点不是重复建设底层模型，而是面向研究业务提供可验证的应用层。</p>
+      <ul><li>任务可以拆解，过程可以保存；</li><li>来源可以回链，数字可以核验；</li><li>结论保留人工复核和责任边界。</li></ul>
+      <div class="footer"><span>让金融研究更快、更稳、更可核验</span><span>— 05 —</span></div>
+    </article>
+  </section>
+
+  <section class="variant b">
+    <div class="label">B · INDEX SYSTEM</div>
+    <article class="page">
+      <div class="header"><span>弈金 · 工行杯策划书</span><span>RESEARCH WORKBENCH</span></div>
+      <div class="watermark">03</div><div class="index"></div><div class="chapter">RESEARCH WORKFLOW</div>
+      <div class="eyebrow">PAIN POINTS / 03</div><h1>三、金融研究业务链条与痛点分析</h1><div class="mini-rule"></div>
+      <h2>3.1 传统上市公司研究流程</h2>
+      <p>一项完整的上市公司研究通常包含：提出问题、确定范围、搜集资料、提取事实、分析行业与基本面、建立估值假设、识别风险、交叉验证、撰写报告、人工复核与归档更新。</p>
+      <div class="callout"><b>痛点归纳</b>　传统研究的瓶颈不是不会分析，而是资料、任务、证据和判断之间缺少稳定连接。</div>
+      <h2>3.2 资料分散造成研究上下文断裂</h2>
+      <p>研究人员需要在年报、公告、政策、新闻、研报和数据库之间反复切换。不同来源在时间、口径、单位和可信程度上存在差异，后续复核时也难以快速回到原始依据。</p>
+      <div class="risk"><div>SOURCE<br>来源与定位</div><div>CONTEXT<br>上下文与口径</div><div>TRACE<br>过程与任务</div><div>REVIEW<br>人工复核</div></div>
+      <div class="footer"><span>弈金 / INDEX SYSTEM</span><span>— 07 —</span></div>
+    </article>
+  </section>
+
+  <section class="variant c">
+    <div class="label">C · EVIDENCE STAMP</div>
+    <article class="page">
+      <div class="header"><span>弈金 · 工行杯策划书</span><span>TRACEABLE BY DESIGN</span></div>
+      <div class="watermark">04</div><div class="stamp">EVIDENCE<br>CHECKED<br>HUMAN REVIEW</div>
+      <div class="eyebrow">PRODUCT PRINCIPLE / 04</div><h1>五、产品方案</h1><div class="line"><i></i><b></b></div>
+      <h2>5.1 产品闭环</h2>
+      <p>用户上传年报、公告或其他研究材料，输入研究问题；系统生成任务图，分派行业、基本面、消息面、估值和风险 Specialist；最后合成带来源、生成时间、风险提示和人工复核状态的报告草稿。</p>
+      <div class="callout"><b>产品原则</b>　任何结论都必须回答：依据是什么、口径是什么、谁来复核。无法回答时，结论只能停留在 AI 草稿状态。</div>
+      <h2>5.2 核心功能</h2>
+      <ul><li>智能研究指挥台：把自然语言问题转化为结构化任务图；</li><li>多 Specialist 协作：让专业任务并行或按依赖执行；</li><li>证据与质量协议：保存来源、定位、计算和待复核项。</li></ul>
+      <div class="footer"><span>TRACEABLE / REVIEWABLE / REUSABLE</span><span>— 09 —</span></div>
+    </article>
+  </section>
+</main>
+</body>
+</html>
