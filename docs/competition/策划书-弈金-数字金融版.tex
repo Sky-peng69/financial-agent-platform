@@ -83,6 +83,17 @@
 \renewcommand{\headrulewidth}{0.5pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{deepnavy!40}\leaders\hrule height \headrulewidth\hfill}}
 
+% 正文页的低对比度研究数据背景：只做氛围，不干扰阅读
+\AddToHook{shipout/background}{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \draw[deepnavy!5, line width=0.35pt] ($(current page.north east)+(-2.15cm,-1.0cm)$) -- ($(current page.south east)+(-2.15cm,1.0cm)$);
+    \draw[deepnavy!5, line width=0.35pt] ($(current page.north east)+(-3.0cm,-1.0cm)$) -- ($(current page.south east)+(-3.0cm,1.0cm)$);
+    \draw[deepnavy!5, line width=0.35pt] ($(current page.north east)+(-4.0cm,-5.3cm)$) -- ($(current page.north east)+(-1.2cm,-5.3cm)$);
+    \fill[icbcred!18] ($(current page.north east)+(-2.15cm,-5.3cm)$) circle (0.07cm);
+    \fill[icbcgold!28] ($(current page.north east)+(-3.0cm,-8.2cm)$) circle (0.05cm);
+  \end{tikzpicture}%
+}
+
 % ---- 首页样式（标题页之后重置）----
 \fancypagestyle{plain}{%
   \fancyhf{}
@@ -277,6 +288,8 @@
   \end{minipage}
 
   \begin{tikzpicture}[remember picture, overlay]
+    % IP 形象：弈研，作为封面右下角的研究伙伴
+    \node[anchor=south east] at ($(current page.south east)+(-2.0cm,4.0cm)$) {\includegraphics[width=5.0cm]{assets/yijin-mascot.png}};
     \node[anchor=south west, font=\footnotesize\color{deepnavy!60}] at ($(current page.south west)+(2.25cm,2.45cm)$) {让金融研究更快、更稳、更可核验};
     \node[anchor=south east, font=\footnotesize\color{deepnavy!45}] at ($(current page.south east)+(-2.25cm,2.45cm)$) {YIJIN / 2026};
   \end{tikzpicture}
