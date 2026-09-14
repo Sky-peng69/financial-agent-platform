@@ -128,18 +128,15 @@
   }
 }
 
-% ==================== Blockquote 样式（左侧 3px 紫色竖线）====================
-\LetLtxMacro{\oldquote}{\quote}
-\LetLtxMacro{\oldendquote}{\endquote}
+
+% ==================== 重点判断样式（红金证据条）====================
 \renewenvironment{quote}{%
-  \vspace{0.3em}%
-  \def\FrameCommand{{\color{quoteborder}\vrule width 3pt}}%
-  \def\FirstFrameCommand{{\color{quoteborder}\vrule width 3pt}}%
-  \MakeFramed{\FrameRestore\noindent\ignorespaces}%
-  \small
+  \par\vspace{0.45em}%
+  \leftskip=0.6em\rightskip=0.6em
+  \noindent\color{icbcred}\rule{3pt}{1.15em}\hspace{0.55em}%
+  \small\color{deepnavy!85}\itshape\ignorespaces
 }{%
-  \endMakeFramed
-  \vspace{0.3em}%
+  \par\vspace{0.45em}%
 }
 
 % ==================== 代码块样式（暗 slate 背景 + 等宽字体）====================
@@ -326,6 +323,10 @@ Specialist 按照专业分工并行或按依赖执行；Search Provider
 基础。后续将围绕结构化
 DAG、公开金融数据接入、质量评测、权限隔离和机构试点逐步推进。普通投资爱好者可以使用弈金进行公开资料研究辅助，但系统不提供个性化买卖指令，不自动交易，正式报告必须经过人工复核。
 
+\begin{quote}
+\textbf{项目判断}　弈金不是把``聊天''搬进金融，而是把金融研究中最耗时、最容易遗漏、最难复核的环节，组织成一条可追溯的数字化工作流。模型负责协助，专业人员负责判断，证据负责支撑。
+\end{quote}
+
 \subsection{一
 项目概况与参赛定位}\label{ux4e00-ux9879ux76eeux6982ux51b5ux4e0eux53c2ux8d5bux5b9aux4f4d}
 
@@ -411,7 +412,7 @@ Specialist，并行完成资料提取、公开信息补充和专业分析，最�
 
 在研究业务中，单点工具只能解决某个环节。例如，搜索工具解决资料发现，文档工具解决内容提取，数据库解决指标查询，写作工具解决文字生成。研究人员仍然需要自己判断资料、安排分析顺序、比对口径、核对来源和合成结论。
 
-因此，下一阶段的数字金融产品需要解决的不只是``有没有一个 AI
+因此，下一阶段的数字金融产品需要回答的，不只是``有没有一个 AI
 工具''，而是：
 
 \begin{itemize}
@@ -484,8 +485,8 @@ Specialist，并行完成资料提取、公开信息补充和专业分析，最�
 
 \subsubsection{2.4 项目必要性}\label{ux9879ux76eeux5fc5ux8981ux6027}
 
-弈金的必要性不是因为``市场缺少一个 AI
-聊天工具''，而是因为金融研究业务存在以下结构性矛盾：
+弈金的必要性，不是因为市场缺少一个 AI
+聊天工具，而是因为金融研究业务存在以下结构性矛盾：
 
 {\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}
@@ -533,6 +534,10 @@ AI 生成效率与金融可信要求 & 结论流畅但来源、数字和口径�
 
 这条链条的难点不在于某一个步骤特别复杂，而在于步骤之间相互依赖：资料选错会影响分析，口径不一致会影响计算，来源缺失会影响复核，前面任务的遗漏会在报告合成阶段集中暴露。
 
+\begin{quote}
+\textbf{痛点归纳}　传统研究的瓶颈不是``不会分析''，而是资料、任务、证据与判断之间缺少稳定连接。谁能把这条连接做得更短、更清楚、更可回溯，谁就更接近金融研究智能化的真实价值。
+\end{quote}
+
 \subsubsection{3.2
 痛点一：资料分散造成研究上下文断裂}\label{ux75dbux70b9ux4e00ux8d44ux6599ux5206ux6563ux9020ux6210ux7814ux7a76ux4e0aux4e0bux6587ux65adux88c2}
 
@@ -574,7 +579,9 @@ AI 生成效率与金融可信要求 & 结论流畅但来源、数字和口径�
   哪个结论还缺少证据。
 \end{itemize}
 
-弈金使用 Commander + Specialist 将金融研究中的专业协作显式化。
+弈金使用 Commander + Specialist 将金融研究中的专业协作显式化：先由
+Commander 明确问题和依赖，再由不同 Specialist
+分工执行，最后由报告合成与人工复核共同收口。
 
 \subsubsection{3.4
 痛点三：关键数字和结论难以核验}\label{ux75dbux70b9ux4e09ux5173ux952eux6570ux5b57ux548cux7ed3ux8bbaux96beux4ee5ux6838ux9a8c}
@@ -736,6 +743,11 @@ PDF。系统对材料进行文本提取、分块和关键词检索，并通过�
 都遵循``读取任务与证据---生成分析---核验数字、计算和引用---检查完整性、逻辑、格式和风险---输出内容、证据、质量状态和待复核项''的协议。
 
 统一协议包括来源地址、标题、定位信息和获取时间；原始数据、计算数据和模型判断的区分；公式、输入数据和单位的记录；关键数字的来源核验；结论与证据之间的对应关系；失败、超时、冲突和跳过状态；人工复核事项和风险提示。
+
+\begin{quote}
+\textbf{产品原则}　任何一个看似``完整''的结论，只要不能回答``依据是什么、口径是什么、谁来复核''，就只能停留在
+AI 草稿状态，不能直接进入正式金融决策流程。
+\end{quote}
 
 \subsection{六
 工商银行数字金融适配}\label{ux516d-ux5de5ux5546ux94f6ux884cux6570ux5b57ux91d1ux878dux9002ux914d}

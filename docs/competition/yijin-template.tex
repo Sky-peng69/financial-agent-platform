@@ -128,18 +128,15 @@
   }
 }
 
-% ==================== Blockquote 样式（左侧 3px 紫色竖线）====================
-\LetLtxMacro{\oldquote}{\quote}
-\LetLtxMacro{\oldendquote}{\endquote}
+
+% ==================== 重点判断样式（红金证据条）====================
 \renewenvironment{quote}{%
-  \vspace{0.3em}%
-  \def\FrameCommand{{\color{quoteborder}\vrule width 3pt}}%
-  \def\FirstFrameCommand{{\color{quoteborder}\vrule width 3pt}}%
-  \MakeFramed{\FrameRestore\noindent\ignorespaces}%
-  \small
+  \par\vspace{0.45em}%
+  \leftskip=0.6em\rightskip=0.6em
+  \noindent\color{icbcred}\rule{3pt}{1.15em}\hspace{0.55em}%
+  \small\color{deepnavy!85}\itshape\ignorespaces
 }{%
-  \endMakeFramed
-  \vspace{0.3em}%
+  \par\vspace{0.45em}%
 }
 
 % ==================== 代码块样式（暗 slate 背景 + 等宽字体）====================
