@@ -519,6 +519,54 @@ export interface ResearchAssumption {
   updated_at: string;
 }
 
+export interface BusinessEvent {
+  id: string;
+  research_subject_id: string;
+  title: string;
+  description: string;
+  source_type: string;
+  source_reference: string | null;
+  event_time: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface BusinessEventImpactPreview {
+  event_id: string;
+  impact_summary: string;
+  affected_claim_ids: string[];
+  affected_recommendation_ids: string[];
+  changed_assumptions: string[];
+  evidence_gaps: string[];
+  proposed_actions: {
+    action_type: string;
+    title: string;
+    rationale: string;
+    risk_level: string;
+    evidence_ids: string[];
+  }[];
+  review_required: boolean;
+}
+
+export interface ActionRecommendation {
+  id: string;
+  research_subject_id: string;
+  action_type: string;
+  title: string;
+  rationale: string;
+  risk_level: string;
+  evidence_ids: string[];
+  evidence_items: EvidenceSnippet[];
+  related_claim_ids: string[];
+  related_assumption_ids: string[];
+  status: string;
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ResearchChallenge {
   id: string;
   research_subject_id: string;
@@ -547,6 +595,8 @@ export interface ResearchSubjectWorkspace {
   challenges: ResearchChallenge[];
   decision_memos: DecisionMemo[];
   evidence_count: number;
+  business_events: BusinessEvent[];
+  action_recommendations: ActionRecommendation[];
 }
 
 export const researchSubjects = {
@@ -569,6 +619,63 @@ export const researchSubjects = {
     request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/generate-assets`, {
       method: "POST",
     }),
+  createEvent: (
+    subjectId: string,
+    data: {
+      title: string;
+      description: string;
+      source_type?: string;
+      source_reference?: string | null;
+      event_time?: string | null;
+    },
+  ) =>
+    request<BusinessEvent>(`/api/research-subjects/${subjectId}/events`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listEvents: (subjectId: string) =>
+    request<BusinessEvent[]>(`/api/research-subjects/${subjectId}/events`),
+  previewEventImpact: (subjectId: string, eventId: string) =>
+    request<BusinessEventImpactPreview>(
+      `/api/research-subjects/${subjectId}/events/${eventId}/impact-preview`,
+      { method: "POST" },
+    ),
+  createActionRecommendation: (
+    subjectId: string,
+    data: {
+      action_type: string;
+      title: string;
+      rationale: string;
+      risk_level?: string;
+      evidence_ids?: string[];
+      related_claim_ids?: string[];
+      related_assumption_ids?: string[];
+      status?: string;
+    },
+  ) =>
+    request<ActionRecommendation>(`/api/research-subjects/${subjectId}/action-recommendations`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listActionRecommendations: (subjectId: string) =>
+    request<ActionRecommendation[]>(`/api/research-subjects/${subjectId}/action-recommendations`),
+  reviewActionRecommendation: (
+    subjectId: string,
+    recommendationId: string,
+    data: {
+      title?: string;
+      rationale?: string;
+      status?: string;
+      review_note?: string | null;
+    },
+  ) =>
+    request<ActionRecommendation>(
+      `/api/research-subjects/${subjectId}/action-recommendations/${recommendationId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    ),
   listReports: (id: string) =>
     request<ResearchReport[]>(`/api/research-subjects/${id}/reports`),
   startResearchStream: (

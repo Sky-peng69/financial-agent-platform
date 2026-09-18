@@ -19,6 +19,15 @@ ALLOWED_CATEGORIES = {
     "business",
     "risk",
 }
+ALLOWED_ACTION_TYPES = {
+    "credit_review",
+    "limit_monitoring",
+    "collection_monitoring",
+    "site_visit",
+    "document_follow_up",
+    "product_matching",
+    "risk_control",
+}
 
 
 def _clean_text(value: Any, max_length: int = 1200) -> str:
@@ -39,6 +48,16 @@ def _evidence_indexes(value: Any, evidence_count: int) -> list[int]:
     indexes: list[int] = []
     for item in value[:3]:
         if isinstance(item, int) and 1 <= item <= evidence_count and item not in indexes:
+            indexes.append(item)
+    return indexes
+
+
+def _relation_indexes(value: Any, max_count: int, max_items: int = 3) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    indexes: list[int] = []
+    for item in value[:max_items]:
+        if isinstance(item, int) and 1 <= item <= max_count and item not in indexes:
             indexes.append(item)
     return indexes
 
@@ -111,6 +130,47 @@ def normalize_research_assets(
         "review_status": "ai_draft",
     }
 
+    action_recommendations = []
+    for item in payload.get("action_recommendations", [])[:4]:
+        title = _clean_text(item.get("title"), 200)
+        rationale = _clean_text(item.get("rationale"), 1200)
+        if not title or not rationale:
+            continue
+        action_recommendations.append({
+            "action_type": _enum_value(
+                item.get("action_type"),
+                ALLOWED_ACTION_TYPES,
+                "document_follow_up",
+            ),
+            "title": title,
+            "rationale": rationale,
+            "risk_level": _enum_value(item.get("risk_level"), ALLOWED_LEVELS, "medium"),
+            "evidence_indexes": _evidence_indexes(item.get("evidence_indexes"), evidence_count),
+            "related_claim_indexes": _relation_indexes(item.get("related_claim_indexes"), len(claims)),
+            "related_assumption_indexes": _relation_indexes(
+                item.get("related_assumption_indexes"),
+                len(assumptions),
+            ),
+            "status": "needs_review",
+        })
+
+    if not action_recommendations:
+        fallback_title = decision_memo["suggested_action"] or "补充核验关键不确定性"
+        fallback_rationale = (
+            decision_memo["biggest_uncertainty"]
+            or "当前材料不足以直接形成金融动作，需由人工补充核验。"
+        )
+        action_recommendations.append({
+            "action_type": "document_follow_up",
+            "title": _clean_text(fallback_title, 200),
+            "rationale": _clean_text(fallback_rationale, 1200),
+            "risk_level": "medium",
+            "evidence_indexes": [],
+            "related_claim_indexes": [],
+            "related_assumption_indexes": [],
+            "status": "needs_review",
+        })
+
     if not claims or not assumptions or not challenges or not decision_memo["current_conclusion"]:
         raise ValueError("模型返回的判断资产不完整")
 
@@ -119,6 +179,7 @@ def normalize_research_assets(
         "assumptions": assumptions,
         "challenges": challenges,
         "decision_memo": decision_memo,
+        "action_recommendations": action_recommendations,
     }
 
 
@@ -146,14 +207,15 @@ async def generate_research_assets(
     if not evidence_context:
         raise ValueError("没有可用于分析的材料文本")
 
-    system_prompt = """你是证券公司/基金公司的 A 股投研助理。
-你的任务不是写一篇报告，而是把材料沉淀成可复核的研究判断资产。
+    system_prompt = """你是银行企业金融尽调智能体。
+你的任务不是写一篇报告，而是把企业材料沉淀成可复核的事实、风险判断和金融行动建议。
 
 只允许根据用户提供的材料和研究对象信息输出；证据不足时降低置信度，不要编造数字、事实或来源。
-每条判断和假设都要用 evidence_indexes 标出对应的 E 编号；找不到直接证据时可以留空。
+每条判断、假设和行动建议都要用 evidence_indexes 标出对应的 E 编号；找不到直接证据时可以留空。
+行动建议必须是“下一步可由银行人员执行并复核的动作”，不能自动授信、自动放款、自动调额或自动交易。
 必须只输出 JSON，不要使用 Markdown，不要解释处理过程。"""
 
-    user_prompt = f"""请基于以下研究对象和材料片段，生成结构化判断资产。
+    user_prompt = f"""请基于以下企业和材料片段，生成结构化企业金融尽调资产。
 
 研究对象：
 - 公司：{subject.company_name}
@@ -194,8 +256,19 @@ async def generate_research_assets(
     "current_conclusion": "当前可复核结论",
     "key_basis": "关键依据",
     "biggest_uncertainty": "最大不确定性",
-    "suggested_action": "下一步研究动作"
-  }}
+    "suggested_action": "下一步核验或服务动作"
+  }},
+  "action_recommendations": [
+    {{
+      "action_type": "credit_review|limit_monitoring|collection_monitoring|site_visit|document_follow_up|product_matching|risk_control",
+      "title": "银行人员下一步要做的动作",
+      "rationale": "动作依据和需要关注的风险/机会",
+      "risk_level": "high|medium|low",
+      "evidence_indexes": [1],
+      "related_claim_indexes": [1],
+      "related_assumption_indexes": [1]
+    }}
+  ]
 }}"""
 
     content, _ = await chat(

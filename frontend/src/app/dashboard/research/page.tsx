@@ -77,15 +77,15 @@ export default function ResearchSubjectsPage() {
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="mb-8 animate-fade-up">
-        <p className="text-[#9CA3AF] text-xs mb-2 tracking-widest uppercase">Research</p>
+        <p className="text-[#9CA3AF] text-xs mb-2 tracking-widest uppercase">Enterprise Finance</p>
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
-            <h1 className="text-[#111827] text-2xl font-semibold tracking-tight">公司研究</h1>
-            <p className="text-[#6B7280] text-sm mt-2">围绕公司沉淀判断、假设、证据和反方挑战。</p>
+            <h1 className="text-[#111827] text-2xl font-semibold tracking-tight">企业金融尽调</h1>
+            <p className="text-[#6B7280] text-sm mt-2">围绕企业事实、风险判断、经营事件和可执行金融动作形成闭环。</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-[#6B7280]">
             <span className="badge-neutral">研究对象 {subjects.length}</span>
-            <span className="badge-info">判断工作台</span>
+            <span className="badge-info">决策工作台</span>
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@ export default function ResearchSubjectsPage() {
 
       <div className="space-y-5">
         <section className="card p-5 animate-fade-up stagger-1">
-          <h2 className="text-[#111827] text-sm font-semibold mb-4">新建研究对象</h2>
+          <h2 className="text-[#111827] text-sm font-semibold mb-4">新建企业尽调档案</h2>
           <form className="flex flex-col sm:flex-row gap-3" onSubmit={handleCreate}>
             <div className="flex-1">
               <label className="label">公司名称</label>
@@ -106,14 +106,14 @@ export default function ResearchSubjectsPage() {
                 className="input-field"
                 value={form.company_name}
                 onChange={(e) => setForm({ ...form, company_name: e.target.value })}
-                placeholder="例如：宁德时代"
+                placeholder="例如：某汽车零部件供应商"
               />
             </div>
             <button
               className="btn-primary w-full sm:w-auto sm:self-end text-sm h-[44px] px-5"
               disabled={saving || !form.company_name.trim()}
             >
-              {saving ? "创建中..." : "创建研究对象"}
+              {saving ? "创建中..." : "开始企业尽调"}
             </button>
           </form>
         </section>
@@ -121,8 +121,8 @@ export default function ResearchSubjectsPage() {
         <section className="space-y-3 animate-fade-up stagger-2">
           {subjects.length === 0 ? (
             <div className="card p-10 text-center">
-              <p className="text-[#111827] text-sm font-semibold">暂无公司研究对象</p>
-              <p className="text-[#9CA3AF] text-sm mt-2">先创建一个公司研究档案。</p>
+              <p className="text-[#111827] text-sm font-semibold">暂无企业尽调档案</p>
+              <p className="text-[#9CA3AF] text-sm mt-2">先创建一个企业档案，再上传材料和记录经营事件。</p>
             </div>
           ) : (
             subjects.map((subject) => (

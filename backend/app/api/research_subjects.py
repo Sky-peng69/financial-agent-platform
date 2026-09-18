@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import (
+    ActionRecommendation,
+    BusinessEvent,
     DecisionMemo,
     DocumentEvidence,
     ResearchAssumption,
@@ -19,6 +21,12 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    ActionRecommendationCreate,
+    ActionRecommendationResponse,
+    ActionRecommendationReviewUpdate,
+    BusinessEventCreate,
+    BusinessEventImpactPreviewResponse,
+    BusinessEventResponse,
     DecisionMemoCreate,
     DecisionMemoResponse,
     EvidenceSnippetResponse,
@@ -47,10 +55,12 @@ from app.services.report_builder import (
     report_response,
 )
 from app.services.research_asset_generator import generate_research_assets
+from app.services.event_impact_analyzer import analyze_event_impact
 
 router = APIRouter(prefix="/api/research-subjects", tags=["research-subjects"])
 
 REVIEW_STATUSES = {"needs_review", "active", "confirmed", "rejected"}
+ACTION_REVIEW_STATUSES = {"needs_review", "confirmed", "rejected"}
 
 
 async def _get_subject_for_user(
@@ -86,6 +96,34 @@ async def _get_assumption_for_subject(
     if not assumption or assumption.user_id != user.id or assumption.research_subject_id != subject.id:
         raise HTTPException(status_code=404, detail="假设不存在")
     return assumption
+
+
+async def _get_action_recommendation_for_subject(
+    recommendation_id: str,
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> ActionRecommendation:
+    recommendation = await db.get(ActionRecommendation, recommendation_id)
+    if (
+        not recommendation
+        or recommendation.user_id != user.id
+        or recommendation.research_subject_id != subject.id
+    ):
+        raise HTTPException(status_code=404, detail="金融行动建议不存在")
+    return recommendation
+
+
+async def _get_business_event_for_subject(
+    event_id: str,
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> BusinessEvent:
+    event = await db.get(BusinessEvent, event_id)
+    if not event or event.user_id != user.id or event.research_subject_id != subject.id:
+        raise HTTPException(status_code=404, detail="企业事件不存在")
+    return event
 
 
 def _apply_review_update(
@@ -185,6 +223,7 @@ def _assumption_response(
         assumption.evidence_ids,
         evidence_by_id,
     )
+
     return ResearchAssumptionResponse(
         id=assumption.id,
         research_subject_id=assumption.research_subject_id,
@@ -204,6 +243,58 @@ def _assumption_response(
         created_at=assumption.created_at,
         updated_at=assumption.updated_at,
     )
+
+
+def _action_recommendation_response(
+    recommendation: ActionRecommendation,
+    evidence_by_id: dict[str, DocumentEvidence],
+    history_by_asset_id: dict[str, list[ResearchAssetAudit]] | None = None,
+) -> ActionRecommendationResponse:
+    history_by_asset_id = history_by_asset_id or {}
+    evidence_ids, evidence_items = _evidence_items_for_asset(
+        recommendation.evidence_ids,
+        evidence_by_id,
+    )
+    return ActionRecommendationResponse(
+        id=recommendation.id,
+        research_subject_id=recommendation.research_subject_id,
+        action_type=recommendation.action_type,
+        title=recommendation.title,
+        rationale=recommendation.rationale,
+        risk_level=recommendation.risk_level,
+        evidence_ids=evidence_ids,
+        evidence_items=evidence_items,
+        related_claim_ids=_parse_evidence_ids(recommendation.related_claim_ids),
+        related_assumption_ids=_parse_evidence_ids(recommendation.related_assumption_ids),
+        status=recommendation.status,
+        review_note=recommendation.review_note,
+        reviewed_at=recommendation.reviewed_at,
+        history=[
+            ResearchAssetAuditResponse.model_validate(item)
+            for item in history_by_asset_id.get(recommendation.id, [])
+        ],
+        created_at=recommendation.created_at,
+        updated_at=recommendation.updated_at,
+    )
+
+
+def _action_content(recommendation: ActionRecommendation) -> str:
+    return json.dumps(
+        {"title": recommendation.title, "rationale": recommendation.rationale},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _validated_relation_ids(
+    requested_ids: list[str],
+    valid_ids: set[str],
+    label: str,
+) -> list[str]:
+    invalid_ids = [item for item in requested_ids if item not in valid_ids]
+    if invalid_ids:
+        raise HTTPException(status_code=400, detail=f"{label}包含不属于当前研究对象的记录")
+    return list(dict.fromkeys(requested_ids))
 
 
 def _asset_evidence_ids(
@@ -319,6 +410,18 @@ async def _build_workspace_response(
         .where(DecisionMemo.user_id == user.id)
         .order_by(desc(DecisionMemo.created_at))
     )
+    events_result = await db.execute(
+        select(BusinessEvent)
+        .where(BusinessEvent.research_subject_id == subject.id)
+        .where(BusinessEvent.user_id == user.id)
+        .order_by(desc(BusinessEvent.event_time), desc(BusinessEvent.created_at))
+    )
+    recommendations_result = await db.execute(
+        select(ActionRecommendation)
+        .where(ActionRecommendation.research_subject_id == subject.id)
+        .where(ActionRecommendation.user_id == user.id)
+        .order_by(desc(ActionRecommendation.updated_at))
+    )
     evidence_count_result = await db.execute(
         select(func.count(DocumentEvidence.id))
         .where(DocumentEvidence.research_subject_id == subject.id)
@@ -346,6 +449,14 @@ async def _build_workspace_response(
             for item in memos_result.scalars().all()
         ],
         evidence_count=evidence_count_result.scalar_one(),
+        business_events=[
+            BusinessEventResponse.model_validate(item)
+            for item in events_result.scalars().all()
+        ],
+        action_recommendations=[
+            _action_recommendation_response(item, evidence_by_id, history_by_asset_id)
+            for item in recommendations_result.scalars().all()
+        ],
     )
 
 
@@ -404,6 +515,266 @@ async def get_research_subject(
 ):
     subject = await _get_subject_for_user(subject_id, user, db)
     return ResearchSubjectResponse.model_validate(subject)
+
+
+@router.post("/{subject_id}/events", response_model=BusinessEventResponse)
+async def create_business_event(
+    subject_id: str,
+    data: BusinessEventCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    title = data.title.strip()
+    description = data.description.strip()
+    if not title or not description:
+        raise HTTPException(status_code=400, detail="事件标题和描述不能为空")
+    event = BusinessEvent(
+        research_subject_id=subject.id,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        title=title,
+        description=description,
+        source_type=data.source_type,
+        source_reference=data.source_reference,
+        event_time=data.event_time,
+        status=data.status,
+    )
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return BusinessEventResponse.model_validate(event)
+
+
+@router.get("/{subject_id}/events", response_model=list[BusinessEventResponse])
+async def list_business_events(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    result = await db.execute(
+        select(BusinessEvent)
+        .where(BusinessEvent.research_subject_id == subject.id)
+        .where(BusinessEvent.user_id == user.id)
+        .order_by(desc(BusinessEvent.event_time), desc(BusinessEvent.created_at))
+    )
+    return [BusinessEventResponse.model_validate(item) for item in result.scalars().all()]
+
+
+@router.post(
+    "/{subject_id}/events/{event_id}/impact-preview",
+    response_model=BusinessEventImpactPreviewResponse,
+)
+async def preview_business_event_impact(
+    subject_id: str,
+    event_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    event = await _get_business_event_for_subject(event_id, subject, user, db)
+    claims_result = await db.execute(
+        select(ResearchClaim)
+        .where(ResearchClaim.research_subject_id == subject.id)
+        .where(ResearchClaim.user_id == user.id)
+        .order_by(desc(ResearchClaim.updated_at))
+    )
+    assumptions_result = await db.execute(
+        select(ResearchAssumption)
+        .where(ResearchAssumption.research_subject_id == subject.id)
+        .where(ResearchAssumption.user_id == user.id)
+        .order_by(desc(ResearchAssumption.updated_at))
+    )
+    recommendations_result = await db.execute(
+        select(ActionRecommendation)
+        .where(ActionRecommendation.research_subject_id == subject.id)
+        .where(ActionRecommendation.user_id == user.id)
+        .order_by(desc(ActionRecommendation.updated_at))
+    )
+    evidence_result = await db.execute(
+        select(DocumentEvidence)
+        .where(DocumentEvidence.research_subject_id == subject.id)
+        .where(DocumentEvidence.user_id == user.id)
+        .order_by(DocumentEvidence.created_at, DocumentEvidence.chunk_index)
+        .limit(20)
+    )
+    try:
+        preview = await analyze_event_impact(
+            subject,
+            event,
+            list(claims_result.scalars().all()),
+            list(assumptions_result.scalars().all()),
+            list(recommendations_result.scalars().all()),
+            list(evidence_result.scalars().all()),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="AI 服务暂不可用，请检查模型配置后重试") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="事件影响分析未达到结构化要求，请重试") from exc
+    return BusinessEventImpactPreviewResponse.model_validate(preview)
+
+
+@router.post("/{subject_id}/action-recommendations", response_model=ActionRecommendationResponse)
+async def create_action_recommendation(
+    subject_id: str,
+    data: ActionRecommendationCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    if data.status not in ACTION_REVIEW_STATUSES:
+        raise HTTPException(status_code=400, detail="行动建议复核状态无效")
+    title = data.title.strip()
+    rationale = data.rationale.strip()
+    if not title or not rationale:
+        raise HTTPException(status_code=400, detail="行动建议标题和依据不能为空")
+
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    evidence_ids = _validated_relation_ids(data.evidence_ids, set(evidence_by_id), "证据")
+    claim_result = await db.execute(
+        select(ResearchClaim.id)
+        .where(ResearchClaim.research_subject_id == subject.id)
+        .where(ResearchClaim.user_id == user.id)
+    )
+    assumption_result = await db.execute(
+        select(ResearchAssumption.id)
+        .where(ResearchAssumption.research_subject_id == subject.id)
+        .where(ResearchAssumption.user_id == user.id)
+    )
+    claim_ids = _validated_relation_ids(
+        data.related_claim_ids,
+        set(claim_result.scalars().all()),
+        "判断",
+    )
+    assumption_ids = _validated_relation_ids(
+        data.related_assumption_ids,
+        set(assumption_result.scalars().all()),
+        "假设",
+    )
+    recommendation = ActionRecommendation(
+        research_subject_id=subject.id,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        action_type=data.action_type,
+        title=title,
+        rationale=rationale,
+        risk_level=data.risk_level,
+        evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+        related_claim_ids=json.dumps(claim_ids, ensure_ascii=False) if claim_ids else None,
+        related_assumption_ids=json.dumps(assumption_ids, ensure_ascii=False) if assumption_ids else None,
+        status=data.status,
+    )
+    db.add(recommendation)
+    await db.flush()
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="action_recommendation",
+        asset_id=recommendation.id,
+        action="generated",
+        previous_content=None,
+        new_content=_action_content(recommendation),
+        previous_status=None,
+        new_status=recommendation.status,
+        review_note=None,
+    )
+    await db.commit()
+    await db.refresh(recommendation)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _action_recommendation_response(recommendation, evidence_by_id, history_by_asset_id)
+
+
+@router.get("/{subject_id}/action-recommendations", response_model=list[ActionRecommendationResponse])
+async def list_action_recommendations(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    result = await db.execute(
+        select(ActionRecommendation)
+        .where(ActionRecommendation.research_subject_id == subject.id)
+        .where(ActionRecommendation.user_id == user.id)
+        .order_by(desc(ActionRecommendation.updated_at))
+    )
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return [
+        _action_recommendation_response(item, evidence_by_id, history_by_asset_id)
+        for item in result.scalars().all()
+    ]
+
+
+@router.patch(
+    "/{subject_id}/action-recommendations/{recommendation_id}",
+    response_model=ActionRecommendationResponse,
+)
+async def review_action_recommendation(
+    subject_id: str,
+    recommendation_id: str,
+    data: ActionRecommendationReviewUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    recommendation = await _get_action_recommendation_for_subject(
+        recommendation_id,
+        subject,
+        user,
+        db,
+    )
+    previous_content = _action_content(recommendation)
+    previous_status = recommendation.status
+    action = "updated"
+
+    if data.title is not None:
+        title = data.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="行动建议标题不能为空")
+        recommendation.title = title
+        action = "edited"
+    if data.rationale is not None:
+        rationale = data.rationale.strip()
+        if not rationale:
+            raise HTTPException(status_code=400, detail="行动建议依据不能为空")
+        recommendation.rationale = rationale
+        action = "edited"
+    if data.status is not None:
+        if data.status not in ACTION_REVIEW_STATUSES:
+            raise HTTPException(status_code=400, detail="行动建议复核状态无效")
+        note = data.review_note.strip() if data.review_note else None
+        if data.status == "rejected" and not note:
+            raise HTTPException(status_code=400, detail="驳回时必须填写原因")
+        recommendation.status = data.status
+        recommendation.review_note = note
+        recommendation.reviewed_at = (
+            datetime.now(timezone.utc) if data.status in {"confirmed", "rejected"} else None
+        )
+        action = data.status if data.status in {"confirmed", "rejected"} else "updated"
+    elif data.review_note is not None:
+        recommendation.review_note = data.review_note.strip() or None
+        action = "review_note_updated"
+
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="action_recommendation",
+        asset_id=recommendation.id,
+        action=action,
+        previous_content=previous_content,
+        new_content=_action_content(recommendation),
+        previous_status=previous_status,
+        new_status=recommendation.status,
+        review_note=data.review_note.strip() if data.review_note else None,
+    )
+    await db.commit()
+    await db.refresh(recommendation)
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _action_recommendation_response(recommendation, evidence_by_id, history_by_asset_id)
 
 
 @router.get("/{subject_id}/reports", response_model=list[ResearchReportResponse])
@@ -506,13 +877,14 @@ async def generate_subject_assets(
     except ValueError as exc:
         raise HTTPException(status_code=502, detail="生成结果未达到结构化要求，请重试") from exc
 
+    claim_records: list[ResearchClaim] = []
     for item in assets["claims"]:
         evidence_ids, verification_status = _asset_verification(
             item["evidence_indexes"],
             evidence_items,
             item["verification_status"],
         )
-        db.add(ResearchClaim(
+        claim = ResearchClaim(
             research_subject_id=subject.id,
             user_id=user.id,
             content=item["content"],
@@ -522,15 +894,18 @@ async def generate_subject_assets(
             status=item["status"],
             evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
             verification_status=verification_status,
-        ))
+        )
+        db.add(claim)
+        claim_records.append(claim)
 
+    assumption_records: list[ResearchAssumption] = []
     for item in assets["assumptions"]:
         evidence_ids, verification_status = _asset_verification(
             item["evidence_indexes"],
             evidence_items,
             item["verification_status"],
         )
-        db.add(ResearchAssumption(
+        assumption = ResearchAssumption(
             research_subject_id=subject.id,
             user_id=user.id,
             content=item["content"],
@@ -539,7 +914,57 @@ async def generate_subject_assets(
             status=item["status"],
             evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
             verification_status=verification_status,
-        ))
+        )
+        db.add(assumption)
+        assumption_records.append(assumption)
+
+    await db.flush()
+    claims = claim_records
+    assumptions = assumption_records
+    for item in assets.get("action_recommendations", []):
+        evidence_ids, _ = _asset_verification(
+            item["evidence_indexes"],
+            evidence_items,
+            "needs_review",
+        )
+        claim_ids = [
+            claims[index - 1].id
+            for index in item["related_claim_indexes"]
+            if 1 <= index <= len(claims)
+        ]
+        assumption_ids = [
+            assumptions[index - 1].id
+            for index in item["related_assumption_indexes"]
+            if 1 <= index <= len(assumptions)
+        ]
+        recommendation = ActionRecommendation(
+            research_subject_id=subject.id,
+            user_id=user.id,
+            organization_id=user.organization_id,
+            action_type=item["action_type"],
+            title=item["title"],
+            rationale=item["rationale"],
+            risk_level=item["risk_level"],
+            evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+            related_claim_ids=json.dumps(claim_ids, ensure_ascii=False) if claim_ids else None,
+            related_assumption_ids=json.dumps(assumption_ids, ensure_ascii=False) if assumption_ids else None,
+            status=item["status"],
+        )
+        db.add(recommendation)
+        await db.flush()
+        _add_asset_audit(
+            db,
+            subject=subject,
+            user=user,
+            asset_type="action_recommendation",
+            asset_id=recommendation.id,
+            action="generated",
+            previous_content=None,
+            new_content=_action_content(recommendation),
+            previous_status=None,
+            new_status=recommendation.status,
+            review_note=None,
+        )
 
     for item in assets["challenges"]:
         db.add(ResearchChallenge(
