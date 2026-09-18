@@ -10,7 +10,7 @@
 
 ## Current Stage
 
-企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，当前进入 Codex → Claude Code 串行交接阶段。真实模型回放被开发环境 DeepSeek 凭证阻塞，排在后端测试交付之后。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
+企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，Claude Code Round 1 后端测试已合并，当前进入 Codex 最终整合验收阶段。真实模型回放被开发环境 DeepSeek 凭证阻塞。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
 
 ## Source Of Truth
 
@@ -65,4 +65,4 @@
 
 ## Coordination Status
 
-当前不并行跑同一条验证链路。Codex 已完成产品/前端/文档交接准备并暂停真实回放；`backend/tests/` 尚不存在，下一步由 Claude Code 建立后端测试车道并交付测试结果，之后 Codex 再做最终全链路验收。
+当前不并行跑同一条验证链路。Claude Code Round 1 已新增并合并 `backend/tests/`，20 个测试在宿主 Python 3.13 和容器 Python 3.12 均通过；Codex 已完成前端构建，当前只需完成最终风险审查，不再启动第二个 agent。

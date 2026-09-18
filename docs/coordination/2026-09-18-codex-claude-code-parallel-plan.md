@@ -21,7 +21,9 @@
 
 如果必须跨越文件边界，先在交接记录中说明原因、影响文件和回滚方式。
 
-## 当前阶段：串行接力
+## 当前阶段：串行接力（Round 1 已完成）
+
+Round 1 已由 Claude Code 完成并合并到 `main`：20 个后端测试在宿主 Python 3.13 和容器 Python 3.12 均通过。当前进入 Codex 最终整合验收，不再并行启动第二个验证 agent。
 
 ### 阶段 A：Codex 功能与产品交付
 
@@ -34,7 +36,7 @@
 
 ### 阶段 B：Claude Code 后端验证与修复
 
-只有阶段 A 交接完成后，Claude Code 才开始：
+阶段 A 交接完成后，Claude Code 已完成：
 
 1. 在独立 worktree 中运行后端，补齐项目 requirements 和本地数据库启动验证。
 2. 建立 `backend/tests/`，为以下链路编写 API/服务测试：

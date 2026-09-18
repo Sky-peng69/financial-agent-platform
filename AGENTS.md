@@ -372,7 +372,7 @@ Agent、DAG 调度器和报告层不得直接调用具体模型 SDK。
 
 ### 15.2 当前唯一下一步
 
-完成 Codex → Claude Code 的后端交接，由 Claude Code 建立 `backend/tests` 并完成后端验证；在交接完成前 Codex 不继续真实回放或扩展新 Agent/业务域。
+完成 Codex 最终整合验收：检查 Claude Code Round 1 的后端测试结果、前端构建和剩余风险；真实模型回放等有效 DeepSeek 凭证恢复后再做。不再启动并行 agent 或扩展新 Agent/业务域。
 
 必须验证的场景：
 
@@ -387,14 +387,15 @@ Agent、DAG 调度器和报告层不得直接调用具体模型 SDK。
 → 检查审计记录和权限隔离
 ```
 
-2026-09-18 已确认宿主 Python 3.13 可导入 `asyncpg`，Colima、PostgreSQL 和 Redis 可运行；PDF 上传/解析、证据写入、事件影响、人工确认、审计记录和权限隔离已用本地确定性 stub 完成回放。真实 DeepSeek 调用返回 401（开发环境 API Key 无效），因此真实模型材料生成质量仍未验证；真实回放排在 Claude 后端测试交付之后，不擅自修改或撤销外部密钥。
+2026-09-18 已确认宿主 Python 3.13 可导入 `asyncpg`，Colima、PostgreSQL 和 Redis 可运行；Claude Code Round 1 已合并到 `main`，后端 20 个测试在宿主 Python 3.13 和容器 Python 3.12 均通过，前端构建也通过。PDF 上传/解析、证据写入、事件影响、人工确认、审计记录和权限隔离已用本地确定性 stub 完成回放。真实 DeepSeek 调用返回 401（开发环境 API Key 无效），因此真实模型材料生成质量仍未验证；不擅自修改或撤销外部密钥。
 
 ### 15.3 Codex 与 Claude Code 分工
 
 - Codex：产品策划、竞赛材料、架构决策、前端体验、验收、最终整合。
-- Claude Code：后端依赖、数据库、API、权限、测试和后端修复。
+- Claude Code：已完成 Round 1 后端依赖、数据库、API、权限和测试验证；后续只有明确交接的后端修复任务。
 - 两边使用独立 worktree/分支，禁止同时编辑同一批文件。
 - 默认文件所有权：Codex 负责 `docs/**` 和 `frontend/**`；Claude Code 负责 `backend/**`。
+- 当前阶段不并行验证同一条链路；一个阶段只指定一个主负责人，另一方只在交接点审查。
 - 交接必须说明修改文件、API/schema 变化、验证命令、风险和未完成项。
 
 详细协同计划：
