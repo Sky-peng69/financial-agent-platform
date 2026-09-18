@@ -36,6 +36,9 @@ docker restart agent-frontend-1
 
 | 文档 | 路径 | 何时读 |
 | ---- | ---- | ------ |
+| 新定位设计稿 | [docs/superpowers/specs/2026-09-18-enterprise-financial-agent-design.md](docs/superpowers/specs/2026-09-18-enterprise-financial-agent-design.md) | 产品定位、Agent 架构、MVP 范围、竞赛演示脚本 |
+| MVP 实施计划 | [docs/plans/2026-09-18-enterprise-financial-agent-implementation-plan.md](docs/plans/2026-09-18-enterprise-financial-agent-implementation-plan.md) | 实施顺序、验收命令、Definition of Done |
+| 项目上下文 | [docs/context/current-state.md](docs/context/current-state.md) / [next-actions.md](docs/context/next-actions.md) / [decision-log.md](docs/context/decision-log.md) | 最新状态、下一步行动、已锁定决策（会话开始先读） |
 | 关键架构 | [docs/architecture-financial-agent-platform.md](docs/architecture-financial-agent-platform.md) | 设计架构、新增 Agent、修改编排 |
 | 产品 PRD | [docs/PRD-financial-agent-platform.md](docs/PRD-financial-agent-platform.md) | 规划功能、评估优先级 |
 | 技术规范 | [docs/specification-financial-agent-platform.md](docs/specification-financial-agent-platform.md) | 写 API、设计 DB、开发 Agent |
@@ -43,23 +46,30 @@ docker restart agent-frontend-1
 ## 核心架构
 
 ```text
-用户提问 → Commander 拆解任务 → 多 Specialist 并行分析 → 报告合成师整合输出
+产品中心：企业金融动态尽调与决策智能体（面向银行公司金融/普惠金融/风控场景）
 
-当前 6 个 Specialist Agent:
-  宏观经济分析师 / 行业研究员 / 基本面分析师 / 消息面分析师 / 财富顾问 / 报告合成师
+企业尽调闭环:
+  上传企业材料 → 页码级证据解析 → AI 结构化尽调（判断/假设/反方/行动建议）
+  → 人工确认·驳回·编辑（不可变审计） → 企业事件影响分析 → 尽调备忘录导出
+
+Agent 架构（09-18 设计稿，按金融流程职责划分）:
+  事实核验 / 企业画像 / 行业尽调 / 风险与信用 / 金融匹配 / 治理与审计
+  旧 Commander + 6 Specialist 保留为既有能力（检索、流式、报告导出），不再作为产品中心
+  ResearchSubject 为兼容持久化对象，前端语义已切换为企业金融对象
 
 关键能力:
-  · SSE 流式输出 — 实时逐字推送分析结果
-  · DeepSeek 原生联网搜索 — 每条结论附来源链接
-  · Commander 编排 — 自动识别问题类型，分派 Agent 并行
-  · 搜索引用持久化 — Task.search_references 存档，三页面渲染蓝色链接
-  · PDF 一键导出 — @media print（已知瑕疵：多列表格截断）
+  · PDF 上传解析 — pypdf 页码级文本抽取，证据定位到"第 N 页"
+  · 结构化尽调输出 — 判断/假设/反方/备忘录/行动建议落库并绑定证据
+  · 证据核验三态 — cited / needs_review / insufficient，缺证据不编造引用
+  · 企业事件影响分析 — 新事件标记受影响判断与建议，生成待复核动作（当前为 preview）
+  · 人工复核闭环 — 确认/驳回/编辑 + ResearchAssetAudit 不可变审计历史
+  · SSE 流式输出 / DeepSeek 联网搜索 — 旧链路，保留为导出与检索能力
 
-已知缺口（计划中）:
-  · 无真实金融数据源接入（仅联网搜索）
-  · 无 Agent 链式调用（依赖关系串行）
-  · 无用户反馈机制
-  · 无单元测试
+已知缺口（Codex 开发中）:
+  · FinancingNeed 融资需求对象未落库（目前仅文本）
+  · 事件影响结果未持久化（仅 preview，无批量回放）
+  · 无真实金融数据源接入（仅用户材料 + 联网搜索）
+  · 单元测试补建中 — backend/tests（Claude 验证车道）
 ```
 
 ## 技术栈
@@ -110,7 +120,7 @@ test@test.com / 123456
 | 项目 | 详情 |
 |------|------|
 | 比赛 | 第十七届"工行杯"全国大学生金融科技创新大赛（校赛阶段） |
-| 项目名称 | **弈金** — 多 Agent 协作金融分析平台 |
+| 项目名称 | **弈金** — 企业金融动态尽调与决策智能体 |
 | 参赛形式 | 个人参赛，全栈独立完成 |
 
 ### 参赛文件
@@ -122,78 +132,23 @@ test@test.com / 123456
 
 ### 策划书核心叙事
 
-> 弈金用 Commander + Specialist 多 Agent 架构，让 AI 从"一个聪明人"进化为"一支数字分析团队"。
+> 弈金让 AI 从"对话框里的聪明人"进化为"可审计的数字金融团队"：上传企业材料 → 形成企业画像 → 识别风险与融资需求 → 生成金融行动建议 → 人工复核 → 新事件驱动判断更新，全程留痕可追溯。
+
+⚠️ 策划书本体（[策划书-弈金.md](docs/competition/策划书-弈金.md)）仍是旧 Commander+Specialist 叙事，待按 09-18 新定位重写（暂缓，先完成企业尽调 MVP 闭环）。
 
 ---
 
-## 🔨 待办：策划书 PDF 导出（当前任务）
+## ✅ 已完成：策划书数字金融版导出（09-14）
 
-源文件：[docs/competition/策划书-弈金.md](docs/competition/策划书-弈金.md)（~11,000 字，14 章含大量表格/代码块/ASCII 架构图）
+| 产物 | 路径 | 状态 |
+|------|------|------|
+| PDF | [策划书-弈金-数字金融版.pdf](策划书-弈金-数字金融版.pdf)（根目录，6.4MB） | ✅ |
+| Word | [策划书-弈金-数字金融版.docx](策划书-弈金-数字金融版.docx)（根目录 + docs/competition/ 各一份） | ✅ |
 
-### 已完成的准备工作
-
-| 步骤 | 状态 |
-|------|:--:|
-| 项目改名「融智引擎」→「弈金」（策划书 33 处 + CLAUDE.md + 文件重命名）| ✅ |
-| 策划书内容优化：痛点重写（分析师的一天故事线）| ✅ |
-| 策划书内容优化：竞品深度剖面（ChatGPT/Bloomberg/扣子 × 各半页）| ✅ |
-| 策划书内容优化：商业模式量化（TAM/SAM/SOM + 定价表 + ARR 推演）| ✅ |
-| 章节编号修复（8.1 市场规模/8.2 定价/8.3 切入策略/8.4 量化价值/8.5 应用价值）| ✅ |
-
-### 用户已确认的风格参数
-
-- **整体风格**：投行研报风（像中金/中信行研报告 — 深蓝主色、衬线标题、强调数据表格）
-- **封面**：带几何装饰（Agent 网络节点连线细线图案）
-- **配色**：深 Navy #1a2744 + 紫色强调 #6c5ce7 结合（封面+页眉用深 Navy，表格边框和链接用紫色）
-- **字体**：PingFang SC（苹方，系统自带，已确认可用 — fc-list 验证通过）
-
-### 可用工具（已验证）
-
-| 工具 | 路径 | 状态 |
-|------|------|:--:|
-| Pandoc 3.9 | `/opt/homebrew/bin/pandoc` | ✅ |
-| XeLaTeX | `/Library/TeX/texbin/xelatex` | ✅ |
-| Playwright | Python 可用 | ✅ |
-| `markdown` 库 | Python 3.13 | ✅ |
-| PingFang SC 字体 | 系统 `/System/Library/...` | ✅ |
-| WeasyPrint | ❌ 缺少 `libgobject-2.0` 系统依赖 | 不可用 |
-
-### PDF 生成方案
-
-**推荐路线：Pandoc + XeLaTeX**（理由：LaTeX 学术级排版，中文 + 表格控制力最强，PingFang 字体直接可用）
-
-备选路线：Markdown → HTML + CSS → Playwright → PDF（CSS 控制更灵活，但表格跨页和分页控制不如 LaTeX）
-
-### 具体执行步骤
-
-1. **写 Pandoc LaTeX 模板**（约 200 行）— 定义封面页、页眉页脚、章节标题样式、表格样式、代码块样式、Blockquote 样式
-   - 封面：深 Navy 底色 + 白色文字 + 左侧几何线条装饰（Agent 网络节点）
-   - 页眉：左侧"弈金 · 工行杯策划书"，右侧章节名
-   - 页脚：页码 `— {n} —` 格式
-   - 表格：深 Navy 表头白字 + 隔行浅蓝底 + 竖线隐藏
-   - 代码块/ASCII 图：暗 slate 背景 + 等宽字体（Menlo/Monaco）
-   - Blockquote：左侧 3px 紫色竖线
-   - 链接色：紫色 #6c5ce7
-
-2. **处理 ASCII 架构图**（4.2 节、1.2 节、用户流程图等）— 确保等宽字体 + 浅灰背景
-
-3. **处理 ✓ 和 ✗ 符号** — 策划书表格中有 ✅❌🟢🟡 等 emoji/symbol，确认 XeLaTeX 能渲染
-
-4. **生成 PDF**：`pandoc 策划书-弈金.md -o 策划书-弈金.pdf --pdf-engine=xelatex --template=yijin-template.tex`
-
-5. **调试迭代**：渲染 → 检查分页位置、表格完整性、中文字体 → 微调 LaTeX 参数
-
-6. **输出路径**：`docs/competition/策划书-弈金.pdf`
-
-### 已知会被挑战的点
-
-- 多列表格可能超 A4 宽度 → LaTeX 用 `tabularx` 或 `adjustbox` 缩放
-- ASCII 架构图可能跨页断裂 → 包在 `samepage` 或 `minipage` 中
-- emoji 符号需要字体支持 → 可能需 `Noto Emoji` 或改用文字替代
-- 封面几何装饰线用 LaTeX `tikz` 绘制
+生成脚本与模板在 [scripts/](scripts/) 和 [docs/competition/](docs/competition/)（yijin-template.tex、build-digital-pdf.sh）。注意：该版本内容仍是旧叙事，重写策划书后需重新导出。
 
 ### 参赛注意事项
 
+- 答辩演示按 09-18 设计稿 §9 八步脚本：汽车零部件供应商案例（表面优质、客户集中 + 现金流风险），重点是"企业变化 → 判断变化 → 金融行动变化"闭环，而非生成长报告
 - 策划书中"省赛阶段"标注的功能为真实规划，答辩时可展开讲
-- 答辩重点演示 Commander 编排流程（实时进度最直观）
 - 避免在评委面前打印 PDF——多列表格会截断
