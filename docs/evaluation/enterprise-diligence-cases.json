@@ -1,0 +1,39 @@
+{
+  "version": "2026-09-18.v1",
+  "purpose": "企业金融尽调结构化输出与事件影响回放评测",
+  "cases": [
+    {
+      "id": "enterprise-supplier-001",
+      "stage": "pilot",
+      "material": "backend/tests/fixtures/sample.pdf",
+      "company_profile": "示例企业材料，作为首个可重复回放样本；不代表真实企业质量结论",
+      "fixed_event": {
+        "title": "核心客户订单下降 30%",
+        "description": "核心客户订单下降约 30%，需要重新核验回款、库存和融资需求。",
+        "source_type": "user_input"
+      },
+      "required_outputs": [
+        "claims",
+        "financing_needs",
+        "action_recommendations",
+        "business_event_impact"
+      ],
+      "acceptance_checks": [
+        "关键判断和融资需求能够关联材料证据或明确标记待核验",
+        "融资需求保留金额原文，不由模型猜测金额",
+        "事件影响结果保存受影响资产、证据缺口和建议动作",
+        "事件影响不会自动覆盖判断或创建已确认行动",
+        "人工确认后存在不可变审计记录",
+        "其他用户无法读取该案例资产"
+      ],
+      "manual_scores": {
+        "fact_accuracy": null,
+        "numeric_traceability": null,
+        "citation_coverage": null,
+        "financing_need_quality": null,
+        "event_impact_quality": null,
+        "human_edit_distance": null
+      }
+    }
+  ]
+}
