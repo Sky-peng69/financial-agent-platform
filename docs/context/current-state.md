@@ -10,7 +10,7 @@
 
 ## Current Stage
 
-企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，Claude Code Round 1 后端测试已合并，最终整合验收通过。当前唯一下一项是补齐融资需求对象；真实模型回放被开发环境 DeepSeek 凭证阻塞。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
+企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，Claude Code Round 1 后端测试已合并，最终整合验收通过。融资需求和事件影响结果均已完成最小持久化、历史查询和人工复核边界；当前实现阶段的唯一外部阻塞是真实模型回放所需的有效 DeepSeek 凭证。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
 
 ## Source Of Truth
 
@@ -28,6 +28,8 @@
 
 - 新增后端模型：`ResearchSubject`、`ResearchClaim`、`ResearchAssumption`、`ResearchChallenge`、`DecisionMemo`
 - 新增后端模型：`BusinessEvent`、`ActionRecommendation`
+- 新增后端模型：`FinancingNeed`
+- 新增后端模型：`BusinessEventImpact`
 - 新增后端 API：`/api/research-subjects`
 - 新增后端服务：`backend/app/services/research_asset_generator.py`
 - 新增前端页面：`/dashboard/research`
@@ -48,6 +50,8 @@
 - `generate_research_assets` 已扩展为输出金融行动建议；建议会绑定证据、判断、假设，并自动写入审计历史。
 - 行动建议支持 `needs_review / confirmed / rejected` 状态，不会直接触发授信、调额、支付或交易。
 - 新增事件影响预览：对企业事件分析受影响判断/建议、证据缺口和新动作；用户可将新动作转为待复核建议，再走确认/驳回和审计流程。
+- 新增融资需求闭环：模型输出的融资需求落库，保留金额原文、证据关联、`needs_review / confirmed / rejected` 状态和审计历史；前端支持查看、确认和驳回。
+- 新增事件影响持久化：每次影响分析保存受影响资产、证据缺口、建议动作和生成时间；支持按事件查询历史记录，不自动覆盖判断或创建行动建议。
 
 ## New Product Direction
 
@@ -57,11 +61,11 @@
 
 ## Validation Status
 
-已验证：宿主 Python 3.13 依赖可用；Colima、PostgreSQL 和 Redis 正常运行；PDF 上传与页码级证据解析；判断、假设和行动建议生成写回；“核心客户订单下降 30%”事件影响预览；待复核动作确认；`generated`/`confirmed` 审计历史；不同用户读取隔离（返回 404）；后端 21 个测试通过；前端构建通过；Provider 认证错误映射为 503；资产查询排序稳定。
+已验证：宿主 Python 3.13 依赖可用；Colima、PostgreSQL 和 Redis 正常运行；PDF 上传与页码级证据解析；判断、假设、融资需求和行动建议生成写回；融资需求证据关联与人工确认；“核心客户订单下降 30%”事件影响预览、持久化和历史回放；待复核动作确认；`generated`/`confirmed` 审计历史；不同用户读取隔离（返回 404）；后端 21 个测试通过；前端构建通过；Provider 认证错误映射为 503；资产查询排序稳定。
 
-待验证：使用真实 DeepSeek 的材料生成质量、引用选择和事件影响判断。真实调用已实际发出并返回 401，原因是当前开发环境 API Key 无效；未修改外部密钥。融资需求对象和影响结果批量回放仍未验证。
+待验证：使用真实 DeepSeek 的材料生成质量、引用选择和事件影响判断。真实调用已实际发出并返回 401，原因是当前开发环境 API Key 无效；未修改外部密钥。事件影响结果持久化和批量回放仍未完成。
 
-已知风险：模型认证异常当前从 `/generate-assets` 暴露为 500，需要在后续 Provider 错误分类工作中决定是否转换为用户可执行的 503 提示；本地测试还出现现有 `passlib`/`bcrypt` 版本兼容警告，但不影响本次认证和权限结果。
+已知风险：真实 DeepSeek 材料生成质量和事件影响判断仍未验证；本地测试还出现现有 `passlib`/`bcrypt` 版本兼容警告，但不影响本次认证和权限结果。
 
 ## Coordination Status
 

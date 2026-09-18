@@ -9,7 +9,9 @@ import {
   reports as reportsApi,
   researchSubjects,
   type ActionRecommendation,
+  type BusinessEventImpact,
   type BusinessEventImpactPreview,
+  type FinancingNeed,
   type ResearchReport,
   type ResearchSubjectWorkspace,
   type SearchReference,
@@ -55,6 +57,29 @@ function fileTypeLabel(format: string) {
   if (format === "md") return "Markdown";
   if (format === "pdf") return "PDF";
   return format.toUpperCase();
+}
+
+function financingNeedTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    working_capital: "经营周转",
+    equipment: "设备投入",
+    supply_chain: "供应链金融",
+    overseas: "跨境经营",
+    other: "其他需求",
+  };
+  return labels[value] || value;
+}
+
+function reviewStatusLabel(status: string) {
+  if (status === "confirmed") return "已确认";
+  if (status === "rejected") return "已驳回";
+  return "待复核";
+}
+
+function reviewStatusClass(status: string) {
+  if (status === "confirmed") return "bg-[#ECFDF5] text-[#059669]";
+  if (status === "rejected") return "bg-[#FEF2F2] text-[#DC2626]";
+  return "bg-[#FFF7ED] text-[#C2410C]";
 }
 
 function ReportDownloads({ report }: { report: ResearchReport }) {
@@ -147,6 +172,58 @@ function ActionRecommendationCard({
   );
 }
 
+function FinancingNeedCard({
+  need,
+  onReview,
+}: {
+  need: FinancingNeed;
+  onReview: (need: FinancingNeed, status: "confirmed" | "rejected") => void;
+}) {
+  return (
+    <div className="border border-[#E5E7EB] rounded-lg p-4 bg-white">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[#2563EB] text-[11px] font-semibold uppercase tracking-wide">
+              {financingNeedTypeLabel(need.need_type)}
+            </span>
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${reviewStatusClass(need.status)}`}>
+              {reviewStatusLabel(need.status)}
+            </span>
+          </div>
+          <h3 className="text-[#111827] text-sm font-semibold mt-2">{need.title}</h3>
+        </div>
+        <span className="text-[#6B7280] text-xs shrink-0">紧迫性 {need.urgency}</span>
+      </div>
+      <p className="text-[#4B5563] text-sm leading-relaxed mt-2">{need.description}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+        <span className="text-[#9CA3AF] text-xs">
+          {need.amount_text ? `金额：${need.amount_text}` : "金额待核验"}
+          {need.evidence_items.length > 0 ? ` · 已关联 ${need.evidence_items.length} 条证据` : " · 暂无直接证据"}
+        </span>
+        {need.status === "needs_review" && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="text-xs text-[#059669] border border-[#A7F3D0] rounded-md px-2.5 py-1.5 hover:bg-[#ECFDF5]"
+              onClick={() => onReview(need, "confirmed")}
+            >
+              确认需求
+            </button>
+            <button
+              type="button"
+              className="text-xs text-[#DC2626] border border-[#FECACA] rounded-md px-2.5 py-1.5 hover:bg-[#FEF2F2]"
+              onClick={() => onReview(need, "rejected")}
+            >
+              驳回
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ResearchSubjectReportPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [workspace, setWorkspace] = useState<ResearchSubjectWorkspace | null>(null);
@@ -167,6 +244,7 @@ export default function ResearchSubjectReportPage({ params }: { params: { id: st
   const [eventTitle, setEventTitle] = useState("");
   const [eventDescription, setEventDescription] = useState("");
   const [impactPreview, setImpactPreview] = useState<BusinessEventImpactPreview | null>(null);
+  const [impactHistory, setImpactHistory] = useState<BusinessEventImpact[]>([]);
   const [impactLoading, setImpactLoading] = useState(false);
   const [promotingImpact, setPromotingImpact] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -253,8 +331,24 @@ export default function ResearchSubjectReportPage({ params }: { params: { id: st
     try {
       const preview = await researchSubjects.previewEventImpact(id, eventId);
       setImpactPreview(preview);
+      setImpactHistory((current) => [preview, ...current.filter((item) => item.id !== preview.id)]);
     } catch (err: any) {
       setError(err.message || "事件影响分析失败");
+    } finally {
+      setImpactLoading(false);
+    }
+  }
+
+  async function handleLoadImpactHistory(eventId: string) {
+    setImpactLoading(true);
+    setError("");
+    try {
+      const history = await researchSubjects.listEventImpactPreviews(id, eventId);
+      setImpactHistory(history);
+      setImpactPreview(history[0] || null);
+      setMessage(history.length > 0 ? `已加载 ${history.length} 条影响分析记录` : "该事件暂无影响分析记录");
+    } catch (err: any) {
+      setError(err.message || "影响分析历史加载失败");
     } finally {
       setImpactLoading(false);
     }
@@ -311,6 +405,33 @@ export default function ResearchSubjectReportPage({ params }: { params: { id: st
       setMessage(status === "confirmed" ? "行动建议已确认" : "行动建议已驳回");
     } catch (err: any) {
       setError(err.message || "复核失败");
+    }
+  }
+
+  async function handleReviewFinancingNeed(
+    need: FinancingNeed,
+    status: "confirmed" | "rejected",
+  ) {
+    const reviewNote = status === "rejected" ? window.prompt("请填写驳回原因") : null;
+    if (status === "rejected" && !reviewNote?.trim()) return;
+    try {
+      const updated = await researchSubjects.reviewFinancingNeed(id, need.id, {
+        status,
+        review_note: reviewNote,
+      });
+      setWorkspace((current) =>
+        current
+          ? {
+              ...current,
+              financing_needs: current.financing_needs.map((item) =>
+                item.id === updated.id ? updated : item,
+              ),
+            }
+          : current,
+      );
+      setMessage(status === "confirmed" ? "融资需求已确认" : "融资需求已驳回");
+    } catch (err: any) {
+      setError(err.message || "融资需求复核失败");
     }
   }
 
@@ -456,9 +577,25 @@ export default function ResearchSubjectReportPage({ params }: { params: { id: st
               {generatingAssets ? "智能体分析中..." : "生成尽调资产"}
             </button>
             <div className="text-xs text-[#9CA3AF] self-center">
-              已沉淀证据 {workspace.evidence_count} 条 · 行动建议 {workspace.action_recommendations.length} 条
+              已沉淀证据 {workspace.evidence_count} 条 · 融资需求 {workspace.financing_needs.length} 条 · 行动建议 {workspace.action_recommendations.length} 条
             </div>
           </div>
+
+          {workspace.financing_needs.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[#111827] text-sm font-semibold">融资需求</h3>
+                <span className="text-[#9CA3AF] text-xs">金额与需求均需人工核验</span>
+              </div>
+              {workspace.financing_needs.map((need) => (
+                <FinancingNeedCard
+                  key={need.id}
+                  need={need}
+                  onReview={handleReviewFinancingNeed}
+                />
+              ))}
+            </div>
+          )}
 
           {workspace.action_recommendations.length > 0 ? (
             <div className="mt-6 space-y-3">
@@ -516,15 +653,26 @@ export default function ResearchSubjectReportPage({ params }: { params: { id: st
                     >
                       {impactLoading ? "分析中" : "分析影响"}
                     </button>
+                    <button
+                      type="button"
+                      className="text-[#6B7280] text-xs whitespace-nowrap hover:underline"
+                      disabled={impactLoading}
+                      onClick={() => void handleLoadImpactHistory(event.id)}
+                    >
+                      历史记录
+                    </button>
                   </div>
                   <p className="text-[#6B7280] text-xs leading-relaxed mt-1">{event.description}</p>
                 </div>
               ))}
             </div>
           )}
-          {impactPreview && (
+      {impactPreview && (
             <div className="mt-5 pt-5 border-t border-[#E5E7EB]">
               <p className="text-[#111827] text-sm font-semibold">事件影响预览</p>
+              <p className="text-[#9CA3AF] text-xs mt-1">
+                本次分析已保存 · 历史记录 {impactHistory.length} 条
+              </p>
               <p className="text-[#4B5563] text-sm leading-relaxed mt-2">{impactPreview.impact_summary}</p>
               <div className="flex flex-wrap gap-2 mt-3 text-xs">
                 <span className="badge-neutral">受影响判断 {impactPreview.affected_claim_ids.length}</span>

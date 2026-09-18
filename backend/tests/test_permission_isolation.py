@@ -24,6 +24,7 @@ async def _user_a_with_full_assets(client, monkeypatch, email):
     workspace = response.json()
     recommendation_a = workspace["action_recommendations"][0]
     claim_a = workspace["claims"][0]
+    financing_need_a = workspace["financing_needs"][0]
     response = await client.post(
         f"/api/research-subjects/{subject_a['id']}/events",
         json={"title": "A 的企业事件", "description": "事件描述"},
@@ -39,6 +40,7 @@ async def _user_a_with_full_assets(client, monkeypatch, email):
         "evidence": evidence_a,
         "recommendation": recommendation_a,
         "claim": claim_a,
+        "financing_need": financing_need_a,
         "event": event_a,
     }
 
@@ -138,6 +140,18 @@ async def test_cross_user_recommendation_and_audit_404(client, monkeypatch):
     )
     assert response.status_code == 404
 
+    # B 读取/复核 A 的融资需求 → 404
+    response = await client.get(
+        f"/api/research-subjects/{a['subject']['id']}/financing-needs", headers=headers_b
+    )
+    assert response.status_code == 404
+    response = await client.patch(
+        f"/api/research-subjects/{a['subject']['id']}/financing-needs/{a['financing_need']['id']}",
+        json={"status": "confirmed", "review_note": "B 尝试确认"},
+        headers=headers_b,
+    )
+    assert response.status_code == 404
+
 
 async def test_cross_user_event_impact_404(client, monkeypatch):
     a = await _user_a_with_full_assets(client, monkeypatch, "iso-event-a@test.com")
@@ -147,6 +161,11 @@ async def test_cross_user_event_impact_404(client, monkeypatch):
     # B 对 A 的事件做影响分析 → 404
     response = await client.post(
         f"/api/research-subjects/{a['subject']['id']}/events/{a['event']['id']}/impact-preview",
+        headers=headers_b,
+    )
+    assert response.status_code == 404
+    response = await client.get(
+        f"/api/research-subjects/{a['subject']['id']}/events/{a['event']['id']}/impact-previews",
         headers=headers_b,
     )
     assert response.status_code == 404
@@ -210,6 +229,12 @@ async def test_owner_keeps_full_access(client, monkeypatch):
     body = response.json()
     assert len(body["business_events"]) == 1
     assert len(body["action_recommendations"]) == 1
+    assert len(body["financing_needs"]) == 1
+    response = await client.get(
+        f"/api/research-subjects/{a['subject']['id']}/financing-needs", headers=a["headers"]
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 1
     response = await client.get(f"/api/files/{a['file']['id']}/evidence", headers=a["headers"])
     assert response.status_code == 200
     assert len(response.json()) == 3

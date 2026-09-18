@@ -33,6 +33,10 @@ async def test_full_diligence_chain(client, monkeypatch):
     )
     assert response.status_code == 200, response.text
     workspace = response.json()
+    assert len(workspace["financing_needs"]) == 1
+    financing_need = workspace["financing_needs"][0]
+    assert financing_need["status"] == "needs_review"
+    assert financing_need["evidence_items"]
 
     assert len(workspace["claims"]) == 2
     assert len(workspace["assumptions"]) == 1
@@ -105,6 +109,25 @@ async def test_full_diligence_chain(client, monkeypatch):
     proposed = preview["proposed_actions"][0]
     assert proposed["evidence_ids"] == [evidence[0]["id"]]
     assert preview["review_required"] is True
+    assert preview["id"]
+    assert preview["created_at"]
+
+    # 影响分析结果可回放查询；再次分析形成独立历史记录，不覆盖上一次结果
+    response = await client.post(
+        f"/api/research-subjects/{subject['id']}/events/{event['id']}/impact-preview",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    second_preview_id = response.json()["id"]
+    response = await client.get(
+        f"/api/research-subjects/{subject['id']}/events/{event['id']}/impact-previews",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    impact_history = response.json()
+    assert len(impact_history) == 2
+    assert {item["id"] for item in impact_history} == {preview["id"], second_preview_id}
+    assert impact_history[0]["created_at"] >= impact_history[1]["created_at"]
 
     # 影响结果不得自动转成建议：工作区建议数量不变
     response = await client.get(
@@ -190,6 +213,16 @@ async def test_full_diligence_chain(client, monkeypatch):
 
     # 上传的 PDF 与研究对象绑定关系正确
     assert uploaded_file["research_subject_id"] == subject["id"]
+
+    response = await client.patch(
+        f"/api/research-subjects/{subject['id']}/financing-needs/{financing_need['id']}",
+        json={"status": "confirmed", "review_note": "已确认存在阶段性周转需求"},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    reviewed_need = response.json()
+    assert reviewed_need["status"] == "confirmed"
+    assert any(item["action"] == "confirmed" for item in reviewed_need["history"])
 
 
 async def test_generate_assets_requires_material(client, monkeypatch):

@@ -19,6 +19,13 @@ ALLOWED_CATEGORIES = {
     "business",
     "risk",
 }
+ALLOWED_NEED_TYPES = {
+    "working_capital",
+    "equipment",
+    "supply_chain",
+    "overseas",
+    "other",
+}
 ALLOWED_ACTION_TYPES = {
     "credit_review",
     "limit_monitoring",
@@ -154,6 +161,24 @@ def normalize_research_assets(
             "status": "needs_review",
         })
 
+    financing_needs = []
+    for item in payload.get("financing_needs", [])[:4]:
+        if not isinstance(item, dict):
+            continue
+        title = _clean_text(item.get("title"), 200)
+        description = _clean_text(item.get("description"), 1200)
+        if not title or not description:
+            continue
+        financing_needs.append({
+            "need_type": _enum_value(item.get("need_type"), ALLOWED_NEED_TYPES, "other"),
+            "title": title,
+            "description": description,
+            "amount_text": _clean_text(item.get("amount_text"), 100) or None,
+            "urgency": _enum_value(item.get("urgency"), ALLOWED_LEVELS, "medium"),
+            "evidence_indexes": _evidence_indexes(item.get("evidence_indexes"), evidence_count),
+            "status": "needs_review",
+        })
+
     if not action_recommendations:
         fallback_title = decision_memo["suggested_action"] or "补充核验关键不确定性"
         fallback_rationale = (
@@ -180,6 +205,7 @@ def normalize_research_assets(
         "challenges": challenges,
         "decision_memo": decision_memo,
         "action_recommendations": action_recommendations,
+        "financing_needs": financing_needs,
     }
 
 
@@ -208,10 +234,11 @@ async def generate_research_assets(
         raise ValueError("没有可用于分析的材料文本")
 
     system_prompt = """你是银行企业金融尽调智能体。
-你的任务不是写一篇报告，而是把企业材料沉淀成可复核的事实、风险判断和金融行动建议。
+你的任务不是写一篇报告，而是把企业材料沉淀成可复核的事实、风险判断、融资需求和金融行动建议。
 
 只允许根据用户提供的材料和研究对象信息输出；证据不足时降低置信度，不要编造数字、事实或来源。
 每条判断、假设和行动建议都要用 evidence_indexes 标出对应的 E 编号；找不到直接证据时可以留空。
+融资需求只能记录材料明确支持或需要人工核验的需求，不得推算金额或直接形成授信结论。
 行动建议必须是“下一步可由银行人员执行并复核的动作”，不能自动授信、自动放款、自动调额或自动交易。
 必须只输出 JSON，不要使用 Markdown，不要解释处理过程。"""
 
@@ -258,6 +285,16 @@ async def generate_research_assets(
     "biggest_uncertainty": "最大不确定性",
     "suggested_action": "下一步核验或服务动作"
   }},
+  "financing_needs": [
+    {{
+      "need_type": "working_capital|equipment|supply_chain|overseas|other",
+      "title": "企业可能存在的融资或金融服务需求",
+      "description": "需求依据；证据不足时明确写待核验",
+      "amount_text": "材料明确披露的金额文本，未知时留空",
+      "urgency": "high|medium|low",
+      "evidence_indexes": [1]
+    }}
+  ],
   "action_recommendations": [
     {{
       "action_type": "credit_review|limit_monitoring|collection_monitoring|site_visit|document_follow_up|product_matching|risk_control",

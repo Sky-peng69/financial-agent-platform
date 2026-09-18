@@ -531,7 +531,8 @@ export interface BusinessEvent {
   created_at: string;
 }
 
-export interface BusinessEventImpactPreview {
+export interface BusinessEventImpact {
+  id: string;
   event_id: string;
   impact_summary: string;
   affected_claim_ids: string[];
@@ -546,7 +547,10 @@ export interface BusinessEventImpactPreview {
     evidence_ids: string[];
   }[];
   review_required: boolean;
+  created_at: string;
 }
+
+export type BusinessEventImpactPreview = BusinessEventImpact;
 
 export interface ActionRecommendation {
   id: string;
@@ -559,6 +563,24 @@ export interface ActionRecommendation {
   evidence_items: EvidenceSnippet[];
   related_claim_ids: string[];
   related_assumption_ids: string[];
+  status: string;
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinancingNeed {
+  id: string;
+  research_subject_id: string;
+  need_type: string;
+  title: string;
+  description: string;
+  amount_text: string | null;
+  urgency: string;
+  evidence_ids: string[];
+  evidence_items: EvidenceSnippet[];
   status: string;
   review_note: string | null;
   reviewed_at: string | null;
@@ -594,6 +616,7 @@ export interface ResearchSubjectWorkspace {
   assumptions: ResearchAssumption[];
   challenges: ResearchChallenge[];
   decision_memos: DecisionMemo[];
+  financing_needs: FinancingNeed[];
   evidence_count: number;
   business_events: BusinessEvent[];
   action_recommendations: ActionRecommendation[];
@@ -639,6 +662,10 @@ export const researchSubjects = {
     request<BusinessEventImpactPreview>(
       `/api/research-subjects/${subjectId}/events/${eventId}/impact-preview`,
       { method: "POST" },
+    ),
+  listEventImpactPreviews: (subjectId: string, eventId: string) =>
+    request<BusinessEventImpact[]>(
+      `/api/research-subjects/${subjectId}/events/${eventId}/impact-previews`,
     ),
   createActionRecommendation: (
     subjectId: string,
@@ -798,6 +825,25 @@ export const researchSubjects = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  reviewFinancingNeed: (
+    subjectId: string,
+    needId: string,
+    data: {
+      title?: string;
+      description?: string;
+      amount_text?: string | null;
+      urgency?: string;
+      status?: "needs_review" | "confirmed" | "rejected";
+      review_note?: string | null;
+    },
+  ) =>
+    request<FinancingNeed>(
+      `/api/research-subjects/${subjectId}/financing-needs/${needId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    ),
   updateClaim: (
     subjectId: string,
     claimId: string,

@@ -229,6 +229,45 @@ class BusinessEventResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FinancingNeedCreate(BaseModel):
+    need_type: str = Field(default="other", min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1)
+    amount_text: str | None = Field(default=None, max_length=100)
+    urgency: str = Field(default="medium", max_length=20)
+    evidence_ids: list[str] = Field(default_factory=list)
+    status: str = Field(default="needs_review", max_length=30)
+
+
+class FinancingNeedReviewUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, min_length=1)
+    amount_text: str | None = Field(default=None, max_length=100)
+    urgency: str | None = Field(default=None, max_length=20)
+    status: str | None = Field(default=None, max_length=30)
+    review_note: str | None = None
+
+
+class FinancingNeedResponse(BaseModel):
+    id: str
+    research_subject_id: str
+    need_type: str
+    title: str
+    description: str
+    amount_text: str | None = None
+    urgency: str
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
+    status: str
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
+    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ImpactActionDraft(BaseModel):
     action_type: str
     title: str
@@ -237,7 +276,8 @@ class ImpactActionDraft(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
 
 
-class BusinessEventImpactPreviewResponse(BaseModel):
+class BusinessEventImpactResponse(BaseModel):
+    id: str
     event_id: str
     impact_summary: str
     affected_claim_ids: list[str] = Field(default_factory=list)
@@ -246,6 +286,11 @@ class BusinessEventImpactPreviewResponse(BaseModel):
     evidence_gaps: list[str] = Field(default_factory=list)
     proposed_actions: list[ImpactActionDraft] = Field(default_factory=list)
     review_required: bool = True
+    created_at: datetime
+
+
+class BusinessEventImpactPreviewResponse(BusinessEventImpactResponse):
+    pass
 
 
 class ActionRecommendationCreate(BaseModel):
@@ -333,6 +378,7 @@ class ResearchSubjectWorkspaceResponse(BaseModel):
     assumptions: list[ResearchAssumptionResponse]
     challenges: list[ResearchChallengeResponse]
     decision_memos: list[DecisionMemoResponse]
+    financing_needs: list[FinancingNeedResponse] = Field(default_factory=list)
     evidence_count: int
     business_events: list[BusinessEventResponse] = Field(default_factory=list)
     action_recommendations: list[ActionRecommendationResponse] = Field(default_factory=list)

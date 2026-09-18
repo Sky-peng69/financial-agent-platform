@@ -11,8 +11,10 @@ from app.core.database import get_db
 from app.models import (
     ActionRecommendation,
     BusinessEvent,
+    BusinessEventImpact,
     DecisionMemo,
     DocumentEvidence,
+    FinancingNeed,
     ResearchAssumption,
     ResearchAssetAudit,
     ResearchChallenge,
@@ -25,11 +27,15 @@ from app.schemas import (
     ActionRecommendationResponse,
     ActionRecommendationReviewUpdate,
     BusinessEventCreate,
+    BusinessEventImpactResponse,
     BusinessEventImpactPreviewResponse,
     BusinessEventResponse,
     DecisionMemoCreate,
     DecisionMemoResponse,
     EvidenceSnippetResponse,
+    FinancingNeedCreate,
+    FinancingNeedResponse,
+    FinancingNeedReviewUpdate,
     ResearchAssumptionCreate,
     ResearchAssumptionResponse,
     ResearchAssetAuditResponse,
@@ -61,6 +67,9 @@ router = APIRouter(prefix="/api/research-subjects", tags=["research-subjects"])
 
 REVIEW_STATUSES = {"needs_review", "active", "confirmed", "rejected"}
 ACTION_REVIEW_STATUSES = {"needs_review", "confirmed", "rejected"}
+FINANCING_NEED_REVIEW_STATUSES = {"needs_review", "confirmed", "rejected"}
+FINANCING_NEED_TYPES = {"working_capital", "equipment", "supply_chain", "overseas", "other"}
+FINANCING_NEED_URGENCY = {"high", "medium", "low"}
 
 
 async def _get_subject_for_user(
@@ -112,6 +121,18 @@ async def _get_action_recommendation_for_subject(
     ):
         raise HTTPException(status_code=404, detail="金融行动建议不存在")
     return recommendation
+
+
+async def _get_financing_need_for_subject(
+    need_id: str,
+    subject: ResearchSubject,
+    user: User,
+    db: AsyncSession,
+) -> FinancingNeed:
+    need = await db.get(FinancingNeed, need_id)
+    if not need or need.user_id != user.id or need.research_subject_id != subject.id:
+        raise HTTPException(status_code=404, detail="融资需求不存在")
+    return need
 
 
 async def _get_business_event_for_subject(
@@ -286,6 +307,75 @@ def _action_content(recommendation: ActionRecommendation) -> str:
     )
 
 
+def _financing_need_content(need: FinancingNeed) -> str:
+    return json.dumps(
+        {
+            "title": need.title,
+            "description": need.description,
+            "amount_text": need.amount_text,
+            "urgency": need.urgency,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _json_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _json_list(value: str | None) -> list:
+    if not value:
+        return []
+    return json.loads(value)
+
+
+def _business_event_impact_response(impact: BusinessEventImpact) -> BusinessEventImpactResponse:
+    return BusinessEventImpactResponse(
+        id=impact.id,
+        event_id=impact.business_event_id,
+        impact_summary=impact.impact_summary,
+        affected_claim_ids=_json_list(impact.affected_claim_ids),
+        affected_recommendation_ids=_json_list(impact.affected_recommendation_ids),
+        changed_assumptions=_json_list(impact.changed_assumptions),
+        evidence_gaps=_json_list(impact.evidence_gaps),
+        proposed_actions=_json_list(impact.proposed_actions),
+        review_required=impact.review_required,
+        created_at=impact.created_at,
+    )
+
+
+def _financing_need_response(
+    need: FinancingNeed,
+    evidence_by_id: dict[str, DocumentEvidence],
+    history_by_asset_id: dict[str, list[ResearchAssetAudit]] | None = None,
+) -> FinancingNeedResponse:
+    history_by_asset_id = history_by_asset_id or {}
+    evidence_ids, evidence_items = _evidence_items_for_asset(need.evidence_ids, evidence_by_id)
+    return FinancingNeedResponse(
+        id=need.id,
+        research_subject_id=need.research_subject_id,
+        need_type=need.need_type,
+        title=need.title,
+        description=need.description,
+        amount_text=need.amount_text,
+        urgency=need.urgency,
+        evidence_ids=evidence_ids,
+        evidence_items=evidence_items,
+        status=need.status,
+        review_note=need.review_note,
+        reviewed_at=need.reviewed_at,
+        history=[
+            ResearchAssetAuditResponse.model_validate(item)
+            for item in history_by_asset_id.get(need.id, [])
+        ],
+        created_at=need.created_at,
+        updated_at=need.updated_at,
+    )
+
+
 def _validated_relation_ids(
     requested_ids: list[str],
     valid_ids: set[str],
@@ -422,6 +512,12 @@ async def _build_workspace_response(
         .where(ActionRecommendation.user_id == user.id)
         .order_by(desc(ActionRecommendation.updated_at), desc(ActionRecommendation.id))
     )
+    financing_needs_result = await db.execute(
+        select(FinancingNeed)
+        .where(FinancingNeed.research_subject_id == subject.id)
+        .where(FinancingNeed.user_id == user.id)
+        .order_by(desc(FinancingNeed.updated_at), desc(FinancingNeed.id))
+    )
     evidence_count_result = await db.execute(
         select(func.count(DocumentEvidence.id))
         .where(DocumentEvidence.research_subject_id == subject.id)
@@ -456,6 +552,10 @@ async def _build_workspace_response(
         action_recommendations=[
             _action_recommendation_response(item, evidence_by_id, history_by_asset_id)
             for item in recommendations_result.scalars().all()
+        ],
+        financing_needs=[
+            _financing_need_response(item, evidence_by_id, history_by_asset_id)
+            for item in financing_needs_result.scalars().all()
         ],
     )
 
@@ -612,7 +712,51 @@ async def preview_business_event_impact(
         raise HTTPException(status_code=503, detail="AI 服务暂不可用，请检查模型配置后重试") from exc
     except ValueError as exc:
         raise HTTPException(status_code=502, detail="事件影响分析未达到结构化要求，请重试") from exc
-    return BusinessEventImpactPreviewResponse.model_validate(preview)
+    preview_response = BusinessEventImpactPreviewResponse.model_validate(
+        {**preview, "id": "", "created_at": datetime.now(timezone.utc)}
+    )
+    impact = BusinessEventImpact(
+        research_subject_id=subject.id,
+        business_event_id=event.id,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        impact_summary=preview_response.impact_summary,
+        affected_claim_ids=_json_text(preview_response.affected_claim_ids),
+        affected_recommendation_ids=_json_text(preview_response.affected_recommendation_ids),
+        changed_assumptions=_json_text(preview_response.changed_assumptions),
+        evidence_gaps=_json_text(preview_response.evidence_gaps),
+        proposed_actions=_json_text([item.model_dump() for item in preview_response.proposed_actions]),
+        review_required=preview_response.review_required,
+    )
+    db.add(impact)
+    await db.flush()
+    await db.commit()
+    await db.refresh(impact)
+    return BusinessEventImpactPreviewResponse.model_validate(
+        _business_event_impact_response(impact).model_dump()
+    )
+
+
+@router.get(
+    "/{subject_id}/events/{event_id}/impact-previews",
+    response_model=list[BusinessEventImpactResponse],
+)
+async def list_business_event_impacts(
+    subject_id: str,
+    event_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    await _get_business_event_for_subject(event_id, subject, user, db)
+    result = await db.execute(
+        select(BusinessEventImpact)
+        .where(BusinessEventImpact.research_subject_id == subject.id)
+        .where(BusinessEventImpact.business_event_id == event_id)
+        .where(BusinessEventImpact.user_id == user.id)
+        .order_by(desc(BusinessEventImpact.created_at), desc(BusinessEventImpact.id))
+    )
+    return [_business_event_impact_response(item) for item in result.scalars().all()]
 
 
 @router.post("/{subject_id}/action-recommendations", response_model=ActionRecommendationResponse)
@@ -775,6 +919,154 @@ async def review_action_recommendation(
     evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
     history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
     return _action_recommendation_response(recommendation, evidence_by_id, history_by_asset_id)
+
+
+@router.post("/{subject_id}/financing-needs", response_model=FinancingNeedResponse)
+async def create_financing_need(
+    subject_id: str,
+    data: FinancingNeedCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    if data.need_type not in FINANCING_NEED_TYPES:
+        raise HTTPException(status_code=400, detail="融资需求类型无效")
+    if data.urgency not in FINANCING_NEED_URGENCY:
+        raise HTTPException(status_code=400, detail="融资需求紧迫性无效")
+    if data.status not in FINANCING_NEED_REVIEW_STATUSES:
+        raise HTTPException(status_code=400, detail="融资需求复核状态无效")
+    title = data.title.strip()
+    description = data.description.strip()
+    if not title or not description:
+        raise HTTPException(status_code=400, detail="融资需求标题和描述不能为空")
+
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    evidence_ids = _validated_relation_ids(data.evidence_ids, set(evidence_by_id), "证据")
+    need = FinancingNeed(
+        research_subject_id=subject.id,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        need_type=data.need_type,
+        title=title,
+        description=description,
+        amount_text=data.amount_text.strip() if data.amount_text else None,
+        urgency=data.urgency,
+        evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+        status=data.status,
+    )
+    db.add(need)
+    await db.flush()
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="financing_need",
+        asset_id=need.id,
+        action="generated",
+        previous_content=None,
+        new_content=_financing_need_content(need),
+        previous_status=None,
+        new_status=need.status,
+        review_note=None,
+    )
+    await db.commit()
+    await db.refresh(need)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _financing_need_response(need, evidence_by_id, history_by_asset_id)
+
+
+@router.get("/{subject_id}/financing-needs", response_model=list[FinancingNeedResponse])
+async def list_financing_needs(
+    subject_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    result = await db.execute(
+        select(FinancingNeed)
+        .where(FinancingNeed.research_subject_id == subject.id)
+        .where(FinancingNeed.user_id == user.id)
+        .order_by(desc(FinancingNeed.updated_at), desc(FinancingNeed.id))
+    )
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return [
+        _financing_need_response(item, evidence_by_id, history_by_asset_id)
+        for item in result.scalars().all()
+    ]
+
+
+@router.patch(
+    "/{subject_id}/financing-needs/{need_id}",
+    response_model=FinancingNeedResponse,
+)
+async def review_financing_need(
+    subject_id: str,
+    need_id: str,
+    data: FinancingNeedReviewUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    subject = await _get_subject_for_user(subject_id, user, db)
+    need = await _get_financing_need_for_subject(need_id, subject, user, db)
+    previous_content = _financing_need_content(need)
+    previous_status = need.status
+    action = "updated"
+
+    if data.title is not None:
+        title = data.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="融资需求标题不能为空")
+        need.title = title
+        action = "edited"
+    if data.description is not None:
+        description = data.description.strip()
+        if not description:
+            raise HTTPException(status_code=400, detail="融资需求描述不能为空")
+        need.description = description
+        action = "edited"
+    if data.amount_text is not None:
+        need.amount_text = data.amount_text.strip() or None
+        action = "edited"
+    if data.urgency is not None:
+        if data.urgency not in FINANCING_NEED_URGENCY:
+            raise HTTPException(status_code=400, detail="融资需求紧迫性无效")
+        need.urgency = data.urgency
+        action = "edited"
+    if data.status is not None:
+        if data.status not in FINANCING_NEED_REVIEW_STATUSES:
+            raise HTTPException(status_code=400, detail="融资需求复核状态无效")
+        note = data.review_note.strip() if data.review_note else None
+        if data.status == "rejected" and not note:
+            raise HTTPException(status_code=400, detail="驳回时必须填写原因")
+        need.status = data.status
+        need.review_note = note
+        need.reviewed_at = (
+            datetime.now(timezone.utc) if data.status in {"confirmed", "rejected"} else None
+        )
+        action = data.status if data.status in {"confirmed", "rejected"} else "updated"
+    elif data.review_note is not None:
+        need.review_note = data.review_note.strip() or None
+        action = "review_note_updated"
+
+    _add_asset_audit(
+        db,
+        subject=subject,
+        user=user,
+        asset_type="financing_need",
+        asset_id=need.id,
+        action=action,
+        previous_content=previous_content,
+        new_content=_financing_need_content(need),
+        previous_status=previous_status,
+        new_status=need.status,
+        review_note=data.review_note.strip() if data.review_note else None,
+    )
+    await db.commit()
+    await db.refresh(need)
+    evidence_by_id = await _evidence_by_id_for_subject(subject, user, db)
+    history_by_asset_id = await _history_by_asset_for_subject(subject, user, db)
+    return _financing_need_response(need, evidence_by_id, history_by_asset_id)
 
 
 @router.get("/{subject_id}/reports", response_model=list[ResearchReportResponse])
@@ -963,6 +1255,40 @@ async def generate_subject_assets(
             new_content=_action_content(recommendation),
             previous_status=None,
             new_status=recommendation.status,
+            review_note=None,
+        )
+
+    for item in assets.get("financing_needs", []):
+        evidence_ids, _ = _asset_verification(
+            item["evidence_indexes"],
+            evidence_items,
+            "needs_review",
+        )
+        need = FinancingNeed(
+            research_subject_id=subject.id,
+            user_id=user.id,
+            organization_id=user.organization_id,
+            need_type=item["need_type"],
+            title=item["title"],
+            description=item["description"],
+            amount_text=item["amount_text"],
+            urgency=item["urgency"],
+            evidence_ids=json.dumps(evidence_ids, ensure_ascii=False) if evidence_ids else None,
+            status=item["status"],
+        )
+        db.add(need)
+        await db.flush()
+        _add_asset_audit(
+            db,
+            subject=subject,
+            user=user,
+            asset_type="financing_need",
+            asset_id=need.id,
+            action="generated",
+            previous_content=None,
+            new_content=_financing_need_content(need),
+            previous_status=None,
+            new_status=need.status,
             review_note=None,
         )
 

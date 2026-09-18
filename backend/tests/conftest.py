@@ -128,6 +128,16 @@ FAKE_ASSET_PAYLOAD = {
         "biggest_uncertainty": "储能订单兑现节奏",
         "suggested_action": "补充核验储能订单与成本数据",
     },
+    "financing_needs": [
+        {
+            "need_type": "working_capital",
+            "title": "补充经营周转资金",
+            "description": "订单增长和回款节奏需要进一步核验，可能存在阶段性营运资金需求",
+            "amount_text": "待核验",
+            "urgency": "medium",
+            "evidence_indexes": [2],
+        }
+    ],
     "action_recommendations": [
         {
             "action_type": "site_visit",
