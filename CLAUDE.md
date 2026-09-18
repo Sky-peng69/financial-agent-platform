@@ -140,10 +140,8 @@ test@test.com / 123456
 
 ## ✅ 已完成：策划书数字金融版导出（09-14）
 
-| 产物 | 路径 | 状态 |
-|------|------|------|
-| PDF | [策划书-弈金-数字金融版.pdf](策划书-弈金-数字金融版.pdf)（根目录，6.4MB） | ✅ |
-| Word | [策划书-弈金-数字金融版.docx](策划书-弈金-数字金融版.docx)（根目录 + docs/competition/ 各一份） | ✅ |
+- **PDF**：`策划书-弈金-数字金融版.pdf`（根目录，6.4MB）✅
+- **Word**：`策划书-弈金-数字金融版.docx`（根目录 + docs/competition/ 各一份）✅
 
 生成脚本与模板在 [scripts/](scripts/) 和 [docs/competition/](docs/competition/)（yijin-template.tex、build-digital-pdf.sh）。注意：该版本内容仍是旧叙事，重写策划书后需重新导出。
 
