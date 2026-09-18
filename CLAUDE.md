@@ -1,6 +1,6 @@
-# 金融 Agent 平台
+# 弈金：企业金融动态尽调与决策智能体
 
-多用户金融 AI Agent SaaS 平台。架构融合 **Anthropic Financial Services**（Skills + Connectors + Subagents）与 **阿里云通义点金**（芯—云—模—智），目标让 AI 从"对话框里的聪明人"进化为**能写会算、可审计可追溯的数字员工**。
+面向银行公司金融、普惠金融和风险管理场景。产品中心是“企业材料 → 证据 → 企业事实/风险判断 → 金融行动建议 → 经营事件影响分析 → 人工复核 → 审计记录”，而不是旧的上市公司报告生成或 Commander + Specialist 展示。
 
 ## ⚡ 新会话启动清单
 
@@ -8,9 +8,9 @@
 # 1. 启动所有容器
 docker-compose -f /Users/laurence/Documents/金融agent/docker-compose.yml up -d
 
-# 2. 等 10 秒后端就绪，验证 3 个页面都 200
+# 2. 等 10 秒后端就绪，验证当前企业尽调入口
 sleep 10
-for path in /dashboard "/dashboard/agents/macro-economy-analyst" "/dashboard/tasks"; do
+for path in /dashboard/research /dashboard/tasks; do
   curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:3001${path}"
 done
 
@@ -65,11 +65,17 @@ Agent 架构（09-18 设计稿，按金融流程职责划分）:
   · 人工复核闭环 — 确认/驳回/编辑 + ResearchAssetAudit 不可变审计历史
   · SSE 流式输出 / DeepSeek 联网搜索 — 旧链路，保留为导出与检索能力
 
-已知缺口（Codex 开发中）:
+已知缺口（按串行接力处理，未收到交接前不重复验证）:
   · FinancingNeed 融资需求对象未落库（目前仅文本）
   · 事件影响结果未持久化（仅 preview，无批量回放）
   · 无真实金融数据源接入（仅用户材料 + 联网搜索）
-  · 单元测试补建中 — backend/tests（Claude 验证车道）
+  · `backend/tests/` 当前不存在；Claude Code 在 Codex 完成功能交接后负责建立后端测试车道
+
+当前协同状态:
+  · 功能开发和验证不并行抢同一条链路
+  · Codex 完成功能/文档后提交交接清单
+  · Claude Code 只在收到交接后补测试、运行环境验证和后端修复
+  · Claude Code 完成后再交回 Codex 做前端和全链路最终验收
 ```
 
 ## 技术栈
