@@ -112,7 +112,6 @@ def report_response(report: ResearchReport) -> dict:
     files = json.loads(report.file_manifest)
     return {
         "id": report.id,
-        "research_subject_id": report.research_subject_id,
         "task_id": report.task_id,
         "title": report.title,
         "report_style": report.report_style,
@@ -137,7 +136,6 @@ def create_report_record(
     report_style: str,
     formats: list[str],
     task_id: str | None = None,
-    research_subject_id: str | None = None,
 ) -> ResearchReport:
     report_id = str(uuid.uuid4())
     safe_title = _safe_filename(title)
@@ -161,7 +159,6 @@ def create_report_record(
         id=report_id,
         user_id=user.id,
         organization_id=user.organization_id,
-        research_subject_id=research_subject_id,
         task_id=task_id,
         title=title,
         report_style=style,

@@ -52,7 +52,8 @@ class TaskResponse(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    """百炼编排模式：只需提供标题和分析内容，Commander 自动分配 Agent"""
+    """通用 Agent 编排请求。"""
+
     title: str = Field(min_length=1, max_length=500)
     input_data: str | None = None
     file_ids: list[str] = Field(default_factory=list)
@@ -69,7 +70,6 @@ class AgentInfo(BaseModel):
 
 class ResearchFileResponse(BaseModel):
     id: str
-    research_subject_id: str | None = None
     task_id: str | None = None
     original_name: str
     content_type: str
@@ -83,7 +83,6 @@ class ResearchFileResponse(BaseModel):
 class DocumentEvidenceResponse(BaseModel):
     id: str
     file_id: str
-    research_subject_id: str | None = None
     source_type: str
     page_number: int | None = None
     chunk_index: int
@@ -94,296 +93,6 @@ class DocumentEvidenceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class EvidenceSnippetResponse(BaseModel):
-    id: str
-    file_id: str
-    page_number: int | None = None
-    location_label: str
-    text: str
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchSubjectCreate(BaseModel):
-    company_name: str = Field(min_length=1, max_length=200)
-    ticker: str | None = Field(default=None, max_length=50)
-    industry: str | None = Field(default=None, max_length=100)
-    current_view: str | None = None
-    confidence_level: str | None = Field(default=None, max_length=20)
-    evidence_strength: str | None = Field(default=None, max_length=20)
-
-
-class ResearchSubjectResponse(BaseModel):
-    id: str
-    company_name: str
-    ticker: str | None = None
-    industry: str | None = None
-    status: str
-    current_view: str | None = None
-    confidence_level: str | None = None
-    evidence_strength: str | None = None
-    last_view_updated_at: datetime | None = None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchClaimCreate(BaseModel):
-    content: str = Field(min_length=1)
-    direction: str = Field(default="neutral", max_length=20)
-    confidence_level: str = Field(default="medium", max_length=20)
-    evidence_strength: str = Field(default="medium", max_length=20)
-    status: str = Field(default="needs_review", max_length=30)
-
-
-class ResearchAssetReviewUpdate(BaseModel):
-    content: str | None = Field(default=None, min_length=1)
-    status: str | None = Field(default=None, max_length=30)
-    review_note: str | None = None
-
-
-class ResearchAssetAuditResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    user_id: str
-    asset_type: str
-    asset_id: str
-    action: str
-    previous_content: str | None = None
-    new_content: str | None = None
-    previous_status: str | None = None
-    new_status: str | None = None
-    review_note: str | None = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchClaimResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    content: str
-    direction: str
-    confidence_level: str
-    evidence_strength: str
-    status: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    verification_status: str = "needs_review"
-    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
-    review_note: str | None = None
-    reviewed_at: datetime | None = None
-    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchAssumptionCreate(BaseModel):
-    content: str = Field(min_length=1)
-    category: str = Field(default="business", max_length=50)
-    confidence_level: str = Field(default="medium", max_length=20)
-    status: str = Field(default="active", max_length=30)
-
-
-class ResearchAssumptionResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    content: str
-    category: str
-    confidence_level: str
-    status: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    verification_status: str = "needs_review"
-    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
-    review_note: str | None = None
-    reviewed_at: datetime | None = None
-    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class BusinessEventCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    description: str = Field(min_length=1)
-    source_type: str = Field(default="user_input", max_length=50)
-    source_reference: str | None = Field(default=None, max_length=500)
-    event_time: datetime | None = None
-    status: str = Field(default="active", max_length=30)
-
-
-class BusinessEventResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    title: str
-    description: str
-    source_type: str
-    source_reference: str | None = None
-    event_time: datetime | None = None
-    status: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class FinancingNeedCreate(BaseModel):
-    need_type: str = Field(default="other", min_length=1, max_length=50)
-    title: str = Field(min_length=1, max_length=200)
-    description: str = Field(min_length=1)
-    amount_text: str | None = Field(default=None, max_length=100)
-    urgency: str = Field(default="medium", max_length=20)
-    evidence_ids: list[str] = Field(default_factory=list)
-    status: str = Field(default="needs_review", max_length=30)
-
-
-class FinancingNeedReviewUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, min_length=1)
-    amount_text: str | None = Field(default=None, max_length=100)
-    urgency: str | None = Field(default=None, max_length=20)
-    status: str | None = Field(default=None, max_length=30)
-    review_note: str | None = None
-
-
-class FinancingNeedResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    need_type: str
-    title: str
-    description: str
-    amount_text: str | None = None
-    urgency: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
-    status: str
-    review_note: str | None = None
-    reviewed_at: datetime | None = None
-    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ImpactActionDraft(BaseModel):
-    action_type: str
-    title: str
-    rationale: str
-    risk_level: str
-    evidence_ids: list[str] = Field(default_factory=list)
-
-
-class BusinessEventImpactResponse(BaseModel):
-    id: str
-    event_id: str
-    impact_summary: str
-    affected_claim_ids: list[str] = Field(default_factory=list)
-    affected_recommendation_ids: list[str] = Field(default_factory=list)
-    changed_assumptions: list[str] = Field(default_factory=list)
-    evidence_gaps: list[str] = Field(default_factory=list)
-    proposed_actions: list[ImpactActionDraft] = Field(default_factory=list)
-    review_required: bool = True
-    created_at: datetime
-
-
-class BusinessEventImpactPreviewResponse(BusinessEventImpactResponse):
-    pass
-
-
-class ActionRecommendationCreate(BaseModel):
-    action_type: str = Field(min_length=1, max_length=50)
-    title: str = Field(min_length=1, max_length=200)
-    rationale: str = Field(min_length=1)
-    risk_level: str = Field(default="medium", max_length=20)
-    evidence_ids: list[str] = Field(default_factory=list)
-    related_claim_ids: list[str] = Field(default_factory=list)
-    related_assumption_ids: list[str] = Field(default_factory=list)
-    status: str = Field(default="needs_review", max_length=30)
-
-
-class ActionRecommendationReviewUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    rationale: str | None = Field(default=None, min_length=1)
-    status: str | None = Field(default=None, max_length=30)
-    review_note: str | None = None
-
-
-class ActionRecommendationResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    action_type: str
-    title: str
-    rationale: str
-    risk_level: str
-    evidence_ids: list[str] = Field(default_factory=list)
-    evidence_items: list[EvidenceSnippetResponse] = Field(default_factory=list)
-    related_claim_ids: list[str] = Field(default_factory=list)
-    related_assumption_ids: list[str] = Field(default_factory=list)
-    status: str
-    review_note: str | None = None
-    reviewed_at: datetime | None = None
-    history: list[ResearchAssetAuditResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchChallengeCreate(BaseModel):
-    question: str = Field(min_length=1)
-    claim_id: str | None = None
-    risk_level: str = Field(default="medium", max_length=20)
-    suggested_action: str | None = None
-
-
-class ResearchChallengeResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    claim_id: str | None = None
-    question: str
-    risk_level: str
-    suggested_action: str | None = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class DecisionMemoCreate(BaseModel):
-    current_conclusion: str = Field(min_length=1)
-    key_basis: str | None = None
-    biggest_uncertainty: str | None = None
-    suggested_action: str | None = None
-    review_status: str = Field(default="ai_draft", max_length=30)
-
-
-class DecisionMemoResponse(BaseModel):
-    id: str
-    research_subject_id: str
-    current_conclusion: str
-    key_basis: str | None = None
-    biggest_uncertainty: str | None = None
-    suggested_action: str | None = None
-    review_status: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ResearchSubjectWorkspaceResponse(BaseModel):
-    subject: ResearchSubjectResponse
-    claims: list[ResearchClaimResponse]
-    assumptions: list[ResearchAssumptionResponse]
-    challenges: list[ResearchChallengeResponse]
-    decision_memos: list[DecisionMemoResponse]
-    financing_needs: list[FinancingNeedResponse] = Field(default_factory=list)
-    evidence_count: int
-    business_events: list[BusinessEventResponse] = Field(default_factory=list)
-    action_recommendations: list[ActionRecommendationResponse] = Field(default_factory=list)
-
-
 class ReportFileResponse(BaseModel):
     format: str
     filename: str
@@ -392,7 +101,6 @@ class ReportFileResponse(BaseModel):
 
 class ResearchReportResponse(BaseModel):
     id: str
-    research_subject_id: str | None = None
     task_id: str | None = None
     title: str
     report_style: str
