@@ -23,7 +23,7 @@
 
 ## 当前阶段：串行接力（Round 1 已完成）
 
-Round 1 已由 Claude Code 完成并合并到 `main`：20 个后端测试在宿主 Python 3.13 和容器 Python 3.12 均通过。当前进入 Codex 最终整合验收，不再并行启动第二个验证 agent。
+Round 1 已由 Claude Code 完成并合并到 `main`：21 个后端测试在主工作区通过，交接中的双环境结果仍为全绿。最终整合验收已完成，后续全部任务由 Codex 单 agent 执行，不再并行启动第二个验证 agent。
 
 ### 阶段 A：Codex 功能与产品交付
 

@@ -243,6 +243,34 @@ async def test_generate_assets_llm_failure_maps_to_503(client, monkeypatch):
     assert response.status_code == 502
 
 
+async def test_provider_api_error_is_normalized_to_runtime(monkeypatch):
+    """Provider 认证/HTTP 错误由 LLM 层归类，避免冒泡成 500。"""
+    import httpx
+    from openai import AuthenticationError
+    from types import SimpleNamespace
+
+    from app.services import llm
+
+    request = httpx.Request("POST", "https://api.deepseek.com/v1/chat/completions")
+    response = httpx.Response(401, request=request)
+    provider_error = AuthenticationError(
+        "invalid api key",
+        response=response,
+        body={"error": {"code": "invalid_request_error"}},
+    )
+
+    async def failing_create(**kwargs):
+        raise provider_error
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=failing_create))
+    )
+    monkeypatch.setattr(llm, "get_client", lambda: fake_client)
+
+    with pytest.raises(RuntimeError, match="AI 服务暂不可用"):
+        await llm.chat(messages=[], enable_search=False)
+
+
 async def test_event_and_preview_validation(client, monkeypatch):
     """事件与影响预览的输入校验：空事件 400；无判断/证据时预览 502。"""
     install_llm_mocks(monkeypatch)

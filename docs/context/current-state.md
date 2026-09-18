@@ -10,7 +10,7 @@
 
 ## Current Stage
 
-企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，Claude Code Round 1 后端测试已合并，当前进入 Codex 最终整合验收阶段。真实模型回放被开发环境 DeepSeek 凭证阻塞。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
+企业金融尽调 MVP 的设计和实施计划已确认；首个端到端闭环已经完成本地确定性 stub 回放，Claude Code Round 1 后端测试已合并，最终整合验收通过。当前唯一下一项是补齐融资需求对象；真实模型回放被开发环境 DeepSeek 凭证阻塞。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
 
 ## Source Of Truth
 
@@ -57,7 +57,7 @@
 
 ## Validation Status
 
-已验证：宿主 Python 3.13 依赖可用；Colima、PostgreSQL 和 Redis 正常运行；PDF 上传与页码级证据解析；判断、假设和行动建议生成写回；“核心客户订单下降 30%”事件影响预览；待复核动作确认；`generated`/`confirmed` 审计历史；不同用户读取隔离（返回 404）。
+已验证：宿主 Python 3.13 依赖可用；Colima、PostgreSQL 和 Redis 正常运行；PDF 上传与页码级证据解析；判断、假设和行动建议生成写回；“核心客户订单下降 30%”事件影响预览；待复核动作确认；`generated`/`confirmed` 审计历史；不同用户读取隔离（返回 404）；后端 21 个测试通过；前端构建通过；Provider 认证错误映射为 503；资产查询排序稳定。
 
 待验证：使用真实 DeepSeek 的材料生成质量、引用选择和事件影响判断。真实调用已实际发出并返回 401，原因是当前开发环境 API Key 无效；未修改外部密钥。融资需求对象和影响结果批量回放仍未验证。
 
@@ -65,4 +65,4 @@
 
 ## Coordination Status
 
-当前不并行跑同一条验证链路。Claude Code Round 1 已新增并合并 `backend/tests/`，20 个测试在宿主 Python 3.13 和容器 Python 3.12 均通过；Codex 已完成前端构建，当前只需完成最终风险审查，不再启动第二个 agent。
+当前不并行跑同一条验证链路。Claude Code Round 1 已新增并合并 `backend/tests/`，21 个测试在主工作区通过；Codex 已完成最终整合验收，后续全部任务由 Codex 单 agent 执行。

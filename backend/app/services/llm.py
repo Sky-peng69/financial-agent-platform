@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
-from openai import AsyncOpenAI
+from openai import APIError, AsyncOpenAI
 
 from app.core.config import settings
 
@@ -39,6 +39,10 @@ def get_system_prompt() -> str:
 """
 
 
+def _provider_error(exc: APIError) -> RuntimeError:
+    return RuntimeError("AI 服务暂不可用，请检查模型配置后重试")
+
+
 async def chat(
     messages: list[dict],
     model: str = "deepseek-chat",
@@ -66,13 +70,16 @@ async def chat(
     if enable_search:
         extra["web_search_options"] = {"search_context_size": "medium"}
 
-    response = await client.chat.completions.create(
-        model=model,
-        messages=full_messages,
-        temperature=0.3,
-        max_tokens=8192,
-        extra_body=extra if extra else None,
-    )
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=full_messages,
+            temperature=0.3,
+            max_tokens=8192,
+            extra_body=extra if extra else None,
+        )
+    except APIError as exc:
+        raise _provider_error(exc) from exc
     content = response.choices[0].message.content or ""
 
     # 提取联网搜索引用（DeepSeek 返回在 message.search_results 或顶层）
@@ -117,14 +124,17 @@ async def chat_stream(
     if enable_search:
         extra["web_search_options"] = {"search_context_size": "medium"}
 
-    response = await client.chat.completions.create(
-        model=model,
-        messages=full_messages,
-        temperature=0.3,
-        max_tokens=8192,
-        stream=True,
-        extra_body=extra if extra else None,
-    )
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=full_messages,
+            temperature=0.3,
+            max_tokens=8192,
+            stream=True,
+            extra_body=extra if extra else None,
+        )
+    except APIError as exc:
+        raise _provider_error(exc) from exc
 
     collected_search_results: list[dict] = []
 

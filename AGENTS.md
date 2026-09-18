@@ -372,7 +372,7 @@ Agent、DAG 调度器和报告层不得直接调用具体模型 SDK。
 
 ### 15.2 当前唯一下一步
 
-完成 Codex 最终整合验收：检查 Claude Code Round 1 的后端测试结果、前端构建和剩余风险；真实模型回放等有效 DeepSeek 凭证恢复后再做。不再启动并行 agent 或扩展新 Agent/业务域。
+补齐 `FinancingNeed` 最小持久化闭环；真实模型回放等有效 DeepSeek 凭证恢复后再做。不启动并行 agent，不同时推进事件影响持久化或其他新业务域。
 
 必须验证的场景：
 
@@ -387,7 +387,7 @@ Agent、DAG 调度器和报告层不得直接调用具体模型 SDK。
 → 检查审计记录和权限隔离
 ```
 
-2026-09-18 已确认宿主 Python 3.13 可导入 `asyncpg`，Colima、PostgreSQL 和 Redis 可运行；Claude Code Round 1 已合并到 `main`，后端 20 个测试在宿主 Python 3.13 和容器 Python 3.12 均通过，前端构建也通过。PDF 上传/解析、证据写入、事件影响、人工确认、审计记录和权限隔离已用本地确定性 stub 完成回放。真实 DeepSeek 调用返回 401（开发环境 API Key 无效），因此真实模型材料生成质量仍未验证；不擅自修改或撤销外部密钥。
+2026-09-18 已确认宿主 Python 3.13 可导入 `asyncpg`，Colima、PostgreSQL 和 Redis 可运行；Claude Code Round 1 已合并到 `main`，后端 21 个测试在宿主 Python 3.13 环境通过，前端构建也通过。Provider 认证错误已归类为可恢复的 503，判断/假设/行动建议排序已增加稳定 tie-breaker。PDF 上传/解析、证据写入、事件影响、人工确认、审计记录和权限隔离已用本地确定性 stub 完成回放。真实 DeepSeek 调用返回 401（开发环境 API Key 无效），因此真实模型材料生成质量仍未验证；不擅自修改或撤销外部密钥。
 
 ### 15.3 Codex 与 Claude Code 分工
 

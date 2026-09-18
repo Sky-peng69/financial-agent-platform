@@ -65,16 +65,17 @@ Agent 架构（09-18 设计稿，按金融流程职责划分）:
   · 人工复核闭环 — 确认/驳回/编辑 + ResearchAssetAudit 不可变审计历史
   · SSE 流式输出 / DeepSeek 联网搜索 — 旧链路，保留为导出与检索能力
 
-已知缺口（按串行接力处理，Round 1 后端验证已完成）:
+已知缺口（由 Codex 单 agent 按顺序处理，Round 1 后端验证已完成）:
   · FinancingNeed 融资需求对象未落库（目前仅文本）
   · 事件影响结果未持久化（仅 preview，无批量回放）
   · 无真实金融数据源接入（仅用户材料 + 联网搜索）
   · `backend/tests/` 已建立；Round 1 共 20 个测试，宿主 Python 3.13 与容器 Python 3.12 均通过
+  · `FinancingNeed` 融资需求对象尚未落库，当前唯一下一项
 
 当前协同状态:
   · Claude Code Round 1 已交付并合并到 main
-  · Codex 当前负责最终整合验收，不再并行启动第二个验证 agent
-  · 后续 Claude Code 只有在明确后端问题或下一轮交接后再介入
+  · Codex 当前负责最终整合和后续全部实现，不再并行启动第二个 agent
+  · Claude Code 不再作为当前阶段的执行依赖
 ```
 
 ## 技术栈

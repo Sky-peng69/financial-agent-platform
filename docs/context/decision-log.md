@@ -27,6 +27,7 @@
 - 本地确定性 stub 只用于验证 API、数据库、审计和权限链路，不能作为真实模型输出质量的证据。
 - Codex 与 Claude Code 改为串行接力：Codex 完成功能/文档交接后，Claude Code 独占后端测试与修复车道，之后 Codex 再做最终全链路验收；不同时验证同一闭环。
 - Claude Code Round 1 已完成并合并到 `main`；后端测试车道现已存在，后续不为重复验证持续运行两个 agent。
+- Provider 层统一将 DeepSeek/OpenAI SDK API 错误转换为可恢复的 `RuntimeError`，API 层返回 503；资产查询使用 ID 作为时间戳相同时的稳定排序键。
 
 ## OPEN
 
