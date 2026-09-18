@@ -2,20 +2,22 @@
 
 ## Project
 
-弈金是面向 A 股投研人员的研究判断工作台。
+弈金正在从 A 股研究判断工作台升级为面向银行公司金融、普惠金融和风险管理场景的企业金融动态尽调与决策智能体。
 
 ## Current Objective
 
-将产品中心从“生成报告”转向“维护公司研究对象、判断、假设、证据、反方挑战和决策备忘录”。
+将产品中心从“生成报告”转向“维护企业金融状态、风险判断、证据、融资需求、金融行动建议和人工复核记录”。
 
 ## Current Stage
 
-第一阶段地基和最小前端驾驶舱已开始落地。
+企业金融尽调 MVP 的设计和实施计划已确认；当前进入首个端到端闭环实现阶段。现有 `ResearchSubject` 作为兼容持久化对象保留，前端语义逐步切换为企业金融对象。
 
 ## Source Of Truth
 
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-09-12-research-judgment-workbench-design.md`
+- `docs/superpowers/specs/2026-09-18-enterprise-financial-agent-design.md`
+- `docs/plans/2026-09-18-enterprise-financial-agent-implementation-plan.md`
 - `backend/app/models/__init__.py`
 - `backend/app/api/research_subjects.py`
 - `backend/app/services/research_asset_generator.py`
@@ -42,6 +44,12 @@
 - 判断和假设新增人工复核动作：确认、驳回、编辑，并保留复核备注和复核时间。
 - 判断和假设新增不可变变更历史：确认、驳回、编辑会记录动作、变更前后内容/状态、备注、操作人和时间，并可在卡片内展开查看。
 
+## New Product Direction
+
+- 首个新闭环为“企业金融尽调智能体”：上传企业材料 → 企业画像 → 风险/融资需求 → 金融行动建议 → 人工复核 → 可审计备忘录。
+- 后续通过企业/行业事件影响分析，让新信息改变受影响的判断和建议；不自动授信、调额、支付或交易。
+- 报告降为尽调备忘录或业务工作包等导出物，不再作为产品首页的唯一结果。
+
 ## Notes
 
-当前生成入口、证据引用展示、人工复核动作和审计历史已经完成编译、构建和接口级验证；本轮未消耗真实模型调用验证完整材料生成质量。
+当前生成入口、证据引用展示、人工复核动作和审计历史已经完成编译、构建和接口级验证；企业金融行动建议和事件影响分析尚未实现。本轮未消耗真实模型调用验证完整材料生成质量。
