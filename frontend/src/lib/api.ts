@@ -25,13 +25,17 @@ async function parseError(res: Response): Promise<string> {
   return detail;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
   const t = token();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
-  if (t) headers.Authorization = `Bearer ${t}`;
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+
   const { signal, ...rest } = options;
 
   let res: Response;
@@ -40,6 +44,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   } catch {
     throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
   }
+
+  // 401/403 统一处理：清除 token，跳转登录页
   if (res.status === 401 || res.status === 403) {
     if (typeof window !== "undefined") {
       localStorage.removeItem("token");
@@ -47,19 +53,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
     throw new ApiError("认证已过期，请重新登录", res.status);
   }
-  if (!res.ok) throw new ApiError(await parseError(res), res.status);
+
+  if (!res.ok) {
+    const detail = await parseError(res);
+    throw new ApiError(detail, res.status);
+  }
   return res.json();
 }
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  organization_id: string | null;
-  is_active: boolean;
-}
-
+// Auth
 export const auth = {
   register: (data: { email: string; password: string }) =>
     request<{ access_token: string; user: User }>("/api/auth/register", {
@@ -72,31 +74,15 @@ export const auth = {
       body: JSON.stringify(data),
     }),
   demo: () =>
-    request<{ access_token: string; user: User }>("/api/auth/demo", { method: "POST" }),
+    request<{ access_token: string; user: User }>("/api/auth/demo", {
+      method: "POST",
+    }),
 };
 
-export interface SearchReference {
-  name?: string;
-  title?: string;
-  url?: string;
-  link?: string;
-  snippet?: string;
-  content?: string;
-}
+// 全局活跃的流式请求控制器，确保同一时间只有一个流
+let _activeStreamController: AbortController | null = null;
 
-export interface Task {
-  id: string;
-  agent_name: string;
-  title: string;
-  status: "pending" | "running" | "completed" | "failed";
-  input_data: string | null;
-  output_data: string | null;
-  search_references: string | null;
-  error_message: string | null;
-  created_at: string;
-  completed_at: string | null;
-}
-
+// Agents
 export interface Agent {
   name: string;
   display_name: string;
@@ -104,34 +90,6 @@ export interface Agent {
   category: string;
   tools: string[];
 }
-
-export interface ResearchFile {
-  id: string;
-  task_id: string | null;
-  original_name: string;
-  content_type: string;
-  size_bytes: number;
-  status: "uploaded" | "parsed" | "failed";
-  created_at: string;
-}
-
-export interface ReportFile {
-  format: "docx" | "md" | "pdf" | string;
-  filename: string;
-  download_url: string;
-}
-
-export interface ResearchReport {
-  id: string;
-  task_id: string | null;
-  title: string;
-  report_style: string;
-  review_status: string;
-  files: ReportFile[];
-  created_at: string;
-}
-
-let activeStreamController: AbortController | null = null;
 
 export const agents = {
   list: (category?: string) =>
@@ -146,59 +104,96 @@ export const agents = {
     name: string,
     data: { agent_name: string; title: string; input_data: string },
     onChunk: (text: string) => void,
-    onDone: (taskId: string, refs: SearchReference[] | null) => void,
+    onDone: (taskId: string, searchReferences: SearchReference[] | null) => void,
     onError: (err: Error) => void,
   ): AbortController => {
     const controller = new AbortController();
     const t = token();
-    activeStreamController?.abort();
-    activeStreamController = controller;
+
+    // 先中止上一个（避免重复点击启动两个并发流）
+    _activeStreamController?.abort();
+    _activeStreamController = controller;
+
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/agents/${name}/run-stream`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+          headers: {
+            "Content-Type": "application/json",
+            ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          },
           body: JSON.stringify(data),
           signal: controller.signal,
         });
-        if (!res.ok) throw new ApiError((await res.text()) || res.statusText, res.status);
+
+        // 401/403 统一处理：清除 token，跳转登录页
+        if (res.status === 401 || res.status === 403) {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            window.location.replace("/login");
+          }
+          throw new ApiError("认证已过期，请重新登录", res.status);
+        }
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new ApiError(text || res.statusText, res.status);
+        }
+
         const reader = res.body?.getReader();
         if (!reader) throw new Error("No response body");
+
         const decoder = new TextDecoder();
         let buffer = "";
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
+
+          // 解析 SSE 帧（以 \n\n 分隔）
           const parts = buffer.split("\n\n");
-          buffer = parts.pop() || "";
+          buffer = parts.pop() || ""; // 保留不完整的最后一帧
+
           for (const part of parts) {
             const line = part.replace(/^data: /, "").trim();
             if (!line) continue;
             try {
               const event = JSON.parse(line);
-              if (event.type === "chunk") onChunk(event.content);
-              if (event.type === "done") onDone(event.task_id, event.search_references || null);
-              if (event.type === "error") onError(new Error(event.message));
-            } catch {
-              // Ignore incomplete SSE payloads.
-            }
+              if (event.type === "chunk") {
+                onChunk(event.content);
+              } else if (event.type === "done") {
+                onDone(event.task_id, event.search_references || null);
+              } else if (event.type === "error") {
+                onError(new Error(event.message));
+              }
+            } catch { /* 跳过解析失败的帧 */ }
           }
         }
-        activeStreamController = null;
+
+        // 流正常结束但无 done 事件（异常情况）：手动通知完成
+        _activeStreamController = null;
       } catch (err: any) {
-        activeStreamController = null;
-        if (err.name !== "AbortError") onError(err);
+        if (err.name === "AbortError") {
+          // 用户主动取消 / 新请求中止旧请求，不报错
+          _activeStreamController = null;
+          return;
+        }
+        _activeStreamController = null;
+        onError(err);
       }
     })();
-    return controller;
+
+    return controller; // 调用方可以 controller.abort() 取消
   },
   analyze: (title: string, inputData: string) =>
     request<Task>("/api/agents/analyze", {
       method: "POST",
       body: JSON.stringify({ title, input_data: inputData }),
-      signal: AbortSignal.timeout(300_000),
+      signal: AbortSignal.timeout(300_000), // 5 min
     }),
+
+  /** SSE 流式版 Commander 分析 —— 实时推送进度事件 */
   analyzeStream: (
     title: string,
     inputData: string,
@@ -222,71 +217,186 @@ export const agents = {
   ): AbortController => {
     const controller = new AbortController();
     const t = token();
-    activeStreamController?.abort();
-    activeStreamController = controller;
+
+    // 先中止上一个
+    _activeStreamController?.abort();
+    _activeStreamController = controller;
+
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/agents/analyze-stream`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-          body: JSON.stringify({ title, input_data: inputData, file_ids: options?.file_ids || [], generate_report: options?.generate_report || false }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          },
+          body: JSON.stringify({
+            title,
+            input_data: inputData,
+            file_ids: options?.file_ids || [],
+            generate_report: options?.generate_report || false,
+          }),
           signal: controller.signal,
         });
-        if (!res.ok) throw new ApiError((await res.text()) || res.statusText, res.status);
+
+        if (res.status === 401 || res.status === 403) {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            window.location.replace("/login");
+          }
+          throw new ApiError("认证已过期，请重新登录", res.status);
+        }
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new ApiError(text || res.statusText, res.status);
+        }
+
         const reader = res.body?.getReader();
         if (!reader) throw new Error("No response body");
+
         const decoder = new TextDecoder();
         let buffer = "";
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
+
           const parts = buffer.split("\n\n");
           buffer = parts.pop() || "";
+
           for (const part of parts) {
             const line = part.replace(/^data: /, "").trim();
             if (!line) continue;
             try {
               const event = JSON.parse(line);
-              if (event.type === "phase") {
-                if (event.plan) callbacks.onPlan(event.plan);
-                callbacks.onPhase(event.phase, event.message);
-              } else if (event.type === "agent_start") {
-                callbacks.onAgentStart(event.agent, event.display_name, event.title || "");
-              } else if (event.type === "agent_done") {
-                callbacks.onAgentDone(event.agent, event.display_name, event.status);
-              } else if (event.type === "synthesizing") {
-                callbacks.onSynthesizing();
-              } else if (event.type === "done") {
-                callbacks.onDone({ task_id: event.task_id, output_data: event.output_data, plan: event.plan, subtask_results: event.subtask_results, search_references: event.search_references || null, report: event.report || null });
-              } else if (event.type === "error") {
-                callbacks.onError(new Error(event.message));
+              switch (event.type) {
+                case "phase":
+                  if (event.plan) callbacks.onPlan(event.plan);
+                  callbacks.onPhase(event.phase, event.message);
+                  break;
+                case "agent_start":
+                  callbacks.onAgentStart(event.agent, event.display_name, event.title || "");
+                  break;
+                case "agent_done":
+                  callbacks.onAgentDone(event.agent, event.display_name, event.status);
+                  break;
+                case "done":
+                  callbacks.onDone({
+                    task_id: event.task_id,
+                    output_data: event.output_data,
+                    plan: event.plan,
+                    subtask_results: event.subtask_results,
+                    search_references: event.search_references || null,
+                    report: event.report || null,
+                  });
+                  break;
+                case "error":
+                  callbacks.onError(new Error(event.message));
+                  break;
               }
-            } catch {
-              // Ignore malformed SSE frames.
-            }
+            } catch { /* skip parse errors */ }
           }
         }
-        activeStreamController = null;
+
+        _activeStreamController = null;
       } catch (err: any) {
-        activeStreamController = null;
-        if (err.name !== "AbortError") callbacks.onError(err);
+        if (err.name === "AbortError") {
+          _activeStreamController = null;
+          return;
+        }
+        _activeStreamController = null;
+        callbacks.onError(err);
       }
     })();
+
     return controller;
   },
 };
+
+// Tasks
+export interface SearchReference {
+  name?: string;
+  title?: string;
+  url?: string;
+  link?: string;
+  snippet?: string;
+  content?: string;
+}
+
+export interface Task {
+  id: string;
+  agent_name: string;
+  title: string;
+  status: "pending" | "running" | "completed" | "failed";
+  input_data: string | null;
+  output_data: string | null;
+  search_references: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
 
 export const tasks = {
   list: () => request<Task[]>("/api/tasks"),
   get: (id: string) => request<Task>(`/api/tasks/${id}`),
 };
 
+export interface ResearchFile {
+  id: string;
+  research_subject_id: string | null;
+  task_id: string | null;
+  original_name: string;
+  content_type: string;
+  size_bytes: number;
+  status: "uploaded" | "parsed" | "failed";
+  created_at: string;
+}
+
+export interface ReportFile {
+  format: "docx" | "md" | "pdf" | string;
+  filename: string;
+  download_url: string;
+}
+
+export interface ResearchReport {
+  id: string;
+  research_subject_id: string | null;
+  task_id: string | null;
+  title: string;
+  report_style: string;
+  review_status: string;
+  files: ReportFile[];
+  created_at: string;
+}
+
 export const reports = {
   downloadFile: async (file: ReportFile) => {
     const t = token();
-    const res = await fetch(`${API_URL}${file.download_url}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-    if (!res.ok) throw new ApiError(await parseError(res), res.status);
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${file.download_url}`, {
+        headers: {
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        },
+      });
+    } catch {
+      throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        window.location.replace("/login");
+      }
+      throw new ApiError("认证已过期，请重新登录", res.status);
+    }
+
+    if (!res.ok) {
+      throw new ApiError(await parseError(res), res.status);
+    }
+
     const blob = await res.blob();
     const href = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -301,22 +411,514 @@ export const reports = {
 
 export const files = {
   list: () => request<ResearchFile[]>("/api/files"),
-  upload: async (file: File, taskId?: string | null) => {
+  upload: async (file: File, taskId?: string | null, researchSubjectId?: string | null) => {
+    const t = token();
     const body = new FormData();
     body.append("file", file);
     if (taskId) body.append("task_id", taskId);
-    const t = token();
-    const res = await fetch(`${API_URL}/api/files`, { method: "POST", headers: t ? { Authorization: `Bearer ${t}` } : {}, body });
-    if (!res.ok) throw new ApiError(await parseError(res), res.status);
+    if (researchSubjectId) body.append("research_subject_id", researchSubjectId);
+
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/api/files`, {
+        method: "POST",
+        headers: {
+          ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        },
+        body,
+      });
+    } catch {
+      throw new ApiError("无法连接后端，请确认 API 服务和数据库已启动", 0);
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        window.location.replace("/login");
+      }
+      throw new ApiError("认证已过期，请重新登录", res.status);
+    }
+
+    if (!res.ok) {
+      throw new ApiError(await parseError(res), res.status);
+    }
+
     return res.json() as Promise<ResearchFile>;
   },
 };
+
+export interface ResearchSubject {
+  id: string;
+  company_name: string;
+  ticker: string | null;
+  industry: string | null;
+  status: string;
+  current_view: string | null;
+  confidence_level: string | null;
+  evidence_strength: string | null;
+  last_view_updated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvidenceSnippet {
+  id: string;
+  file_id: string;
+  page_number: number | null;
+  location_label: string;
+  text: string;
+}
+
+export interface ResearchAssetAudit {
+  id: string;
+  research_subject_id: string;
+  user_id: string;
+  asset_type: string;
+  asset_id: string;
+  action: string;
+  previous_content: string | null;
+  new_content: string | null;
+  previous_status: string | null;
+  new_status: string | null;
+  review_note: string | null;
+  created_at: string;
+}
+
+export interface ResearchClaim {
+  id: string;
+  research_subject_id: string;
+  content: string;
+  direction: string;
+  confidence_level: string;
+  evidence_strength: string;
+  status: string;
+  evidence_ids: string[];
+  verification_status: string;
+  evidence_items: EvidenceSnippet[];
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchAssumption {
+  id: string;
+  research_subject_id: string;
+  content: string;
+  category: string;
+  confidence_level: string;
+  status: string;
+  evidence_ids: string[];
+  verification_status: string;
+  evidence_items: EvidenceSnippet[];
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BusinessEvent {
+  id: string;
+  research_subject_id: string;
+  title: string;
+  description: string;
+  source_type: string;
+  source_reference: string | null;
+  event_time: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface BusinessEventImpact {
+  id: string;
+  event_id: string;
+  impact_summary: string;
+  affected_claim_ids: string[];
+  affected_recommendation_ids: string[];
+  changed_assumptions: string[];
+  evidence_gaps: string[];
+  proposed_actions: {
+    action_type: string;
+    title: string;
+    rationale: string;
+    risk_level: string;
+    evidence_ids: string[];
+  }[];
+  review_required: boolean;
+  created_at: string;
+}
+
+export type BusinessEventImpactPreview = BusinessEventImpact;
+
+export interface ActionRecommendation {
+  id: string;
+  research_subject_id: string;
+  action_type: string;
+  title: string;
+  rationale: string;
+  risk_level: string;
+  evidence_ids: string[];
+  evidence_items: EvidenceSnippet[];
+  related_claim_ids: string[];
+  related_assumption_ids: string[];
+  status: string;
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FinancingNeed {
+  id: string;
+  research_subject_id: string;
+  need_type: string;
+  title: string;
+  description: string;
+  amount_text: string | null;
+  urgency: string;
+  evidence_ids: string[];
+  evidence_items: EvidenceSnippet[];
+  status: string;
+  review_note: string | null;
+  reviewed_at: string | null;
+  history: ResearchAssetAudit[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchChallenge {
+  id: string;
+  research_subject_id: string;
+  claim_id: string | null;
+  question: string;
+  risk_level: string;
+  suggested_action: string | null;
+  created_at: string;
+}
+
+export interface DecisionMemo {
+  id: string;
+  research_subject_id: string;
+  current_conclusion: string;
+  key_basis: string | null;
+  biggest_uncertainty: string | null;
+  suggested_action: string | null;
+  review_status: string;
+  created_at: string;
+}
+
+export interface ResearchSubjectWorkspace {
+  subject: ResearchSubject;
+  claims: ResearchClaim[];
+  assumptions: ResearchAssumption[];
+  challenges: ResearchChallenge[];
+  decision_memos: DecisionMemo[];
+  financing_needs: FinancingNeed[];
+  evidence_count: number;
+  business_events: BusinessEvent[];
+  action_recommendations: ActionRecommendation[];
+}
+
+export const researchSubjects = {
+  list: () => request<ResearchSubject[]>("/api/research-subjects"),
+  create: (data: {
+    company_name: string;
+    ticker?: string | null;
+    industry?: string | null;
+    current_view?: string | null;
+    confidence_level?: string | null;
+    evidence_strength?: string | null;
+  }) =>
+    request<ResearchSubject>("/api/research-subjects", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  workspace: (id: string) =>
+    request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/workspace`),
+  generateAssets: (id: string) =>
+    request<ResearchSubjectWorkspace>(`/api/research-subjects/${id}/generate-assets`, {
+      method: "POST",
+    }),
+  createEvent: (
+    subjectId: string,
+    data: {
+      title: string;
+      description: string;
+      source_type?: string;
+      source_reference?: string | null;
+      event_time?: string | null;
+    },
+  ) =>
+    request<BusinessEvent>(`/api/research-subjects/${subjectId}/events`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listEvents: (subjectId: string) =>
+    request<BusinessEvent[]>(`/api/research-subjects/${subjectId}/events`),
+  previewEventImpact: (subjectId: string, eventId: string) =>
+    request<BusinessEventImpactPreview>(
+      `/api/research-subjects/${subjectId}/events/${eventId}/impact-preview`,
+      { method: "POST" },
+    ),
+  listEventImpactPreviews: (subjectId: string, eventId: string) =>
+    request<BusinessEventImpact[]>(
+      `/api/research-subjects/${subjectId}/events/${eventId}/impact-previews`,
+    ),
+  createActionRecommendation: (
+    subjectId: string,
+    data: {
+      action_type: string;
+      title: string;
+      rationale: string;
+      risk_level?: string;
+      evidence_ids?: string[];
+      related_claim_ids?: string[];
+      related_assumption_ids?: string[];
+      status?: string;
+    },
+  ) =>
+    request<ActionRecommendation>(`/api/research-subjects/${subjectId}/action-recommendations`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listActionRecommendations: (subjectId: string) =>
+    request<ActionRecommendation[]>(`/api/research-subjects/${subjectId}/action-recommendations`),
+  reviewActionRecommendation: (
+    subjectId: string,
+    recommendationId: string,
+    data: {
+      title?: string;
+      rationale?: string;
+      status?: string;
+      review_note?: string | null;
+    },
+  ) =>
+    request<ActionRecommendation>(
+      `/api/research-subjects/${subjectId}/action-recommendations/${recommendationId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    ),
+  listReports: (id: string) =>
+    request<ResearchReport[]>(`/api/research-subjects/${id}/reports`),
+  startResearchStream: (
+    id: string,
+    data: { report_style: string; formats: string[] },
+    callbacks: {
+      onPhase: (phase: string, message: string) => void;
+      onPlan: (plan: any) => void;
+      onAgentStart: (agent: string, displayName: string, agentTitle: string) => void;
+      onAgentDone: (agent: string, displayName: string, status: string) => void;
+      onDone: (result: {
+        task_id: string;
+        output_data: string;
+        plan: any;
+        subtask_results: any[];
+        search_references: SearchReference[] | null;
+        report: ResearchReport | null;
+      }) => void;
+      onError: (err: Error) => void;
+    },
+  ): AbortController => {
+    const controller = new AbortController();
+    const t = token();
+    _activeStreamController?.abort();
+    _activeStreamController = controller;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/research-subjects/${id}/start-research-stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(t ? { Authorization: `Bearer ${t}` } : {}),
+          },
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            window.location.replace("/login");
+          }
+          throw new ApiError("认证已过期，请重新登录", res.status);
+        }
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new ApiError(text || res.statusText, res.status);
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+          for (const part of parts) {
+            const line = part.replace(/^data: /, "").trim();
+            if (!line) continue;
+            try {
+              const event = JSON.parse(line);
+              switch (event.type) {
+                case "phase":
+                  if (event.plan) callbacks.onPlan(event.plan);
+                  callbacks.onPhase(event.phase, event.message);
+                  break;
+                case "agent_start":
+                  callbacks.onAgentStart(event.agent, event.display_name, event.title || "");
+                  break;
+                case "agent_done":
+                  callbacks.onAgentDone(event.agent, event.display_name, event.status);
+                  break;
+                case "done":
+                  callbacks.onDone({
+                    task_id: event.task_id,
+                    output_data: event.output_data,
+                    plan: event.plan,
+                    subtask_results: event.subtask_results,
+                    search_references: event.search_references || null,
+                    report: event.report || null,
+                  });
+                  break;
+                case "error":
+                  callbacks.onError(new Error(event.message));
+                  break;
+              }
+            } catch { /* skip parse errors */ }
+          }
+        }
+        _activeStreamController = null;
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          _activeStreamController = null;
+          return;
+        }
+        _activeStreamController = null;
+        callbacks.onError(err);
+      }
+    })();
+
+    return controller;
+  },
+  createClaim: (
+    subjectId: string,
+    data: {
+      content: string;
+      direction?: string;
+      confidence_level?: string;
+      evidence_strength?: string;
+      status?: string;
+    },
+  ) =>
+    request<ResearchClaim>(`/api/research-subjects/${subjectId}/claims`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  reviewFinancingNeed: (
+    subjectId: string,
+    needId: string,
+    data: {
+      title?: string;
+      description?: string;
+      amount_text?: string | null;
+      urgency?: string;
+      status?: "needs_review" | "confirmed" | "rejected";
+      review_note?: string | null;
+    },
+  ) =>
+    request<FinancingNeed>(
+      `/api/research-subjects/${subjectId}/financing-needs/${needId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    ),
+  updateClaim: (
+    subjectId: string,
+    claimId: string,
+    data: { content?: string; status?: string; review_note?: string | null },
+  ) =>
+    request<ResearchClaim>(`/api/research-subjects/${subjectId}/claims/${claimId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  createAssumption: (
+    subjectId: string,
+    data: {
+      content: string;
+      category?: string;
+      confidence_level?: string;
+      status?: string;
+    },
+  ) =>
+    request<ResearchAssumption>(`/api/research-subjects/${subjectId}/assumptions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateAssumption: (
+    subjectId: string,
+    assumptionId: string,
+    data: { content?: string; status?: string; review_note?: string | null },
+  ) =>
+    request<ResearchAssumption>(`/api/research-subjects/${subjectId}/assumptions/${assumptionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  createChallenge: (
+    subjectId: string,
+    data: {
+      question: string;
+      claim_id?: string | null;
+      risk_level?: string;
+      suggested_action?: string | null;
+    },
+  ) =>
+    request<ResearchChallenge>(`/api/research-subjects/${subjectId}/challenges`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createDecisionMemo: (
+    subjectId: string,
+    data: {
+      current_conclusion: string;
+      key_basis?: string | null;
+      biggest_uncertainty?: string | null;
+      suggested_action?: string | null;
+      review_status?: string;
+    },
+  ) =>
+    request<DecisionMemo>(`/api/research-subjects/${subjectId}/decision-memos`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  organization_id: string | null;
+  is_active: boolean;
+}
 
 export function parseSearchReferences(raw: string | null): SearchReference[] | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return null;
   } catch {
     return null;
   }

@@ -1,0 +1,88 @@
+{
+  "version": "2026-09-18.v2",
+  "purpose": "企业金融尽调结构化输出与事件影响回放评测",
+  "material_boundary": "所有材料均为合成样例，仅用于工程和提示词稳定性评测，不代表真实企业事实、公告或授信依据。",
+  "cases": [
+    {
+      "id": "enterprise-supplier-001",
+      "stage": "pilot",
+      "industry": "新能源制造",
+      "material": "backend/tests/fixtures/sample.pdf",
+      "company_profile": "合成动力电池和储能企业材料，包含模拟财务数据",
+      "fixed_event": {
+        "title": "核心客户订单下降 30%",
+        "description": "核心客户订单下降约 30%，需要重新核验回款、库存和融资需求。",
+        "source_type": "user_input"
+      },
+      "required_outputs": ["claims", "financing_needs", "action_recommendations", "business_event_impact"]
+    },
+    {
+      "id": "manufacturing-equipment-001",
+      "stage": "multi_industry",
+      "industry": "工业制造",
+      "material": "backend/tests/fixtures/evaluation/manufacturing-equipment-001.pdf",
+      "company_profile": "合成工业自动化设备企业材料，包含客户集中度、应收账款和扩产预算",
+      "fixed_event": {
+        "title": "最大客户暂停新增产线订单",
+        "description": "最大客户暂停未来两个季度的新增产线订单，需要重新评估订单可见度、应收账款和扩产资金安排。",
+        "source_type": "user_input"
+      },
+      "required_outputs": ["claims", "financing_needs", "action_recommendations", "business_event_impact"]
+    },
+    {
+      "id": "consumer-retail-001",
+      "stage": "multi_industry",
+      "industry": "消费零售",
+      "material": "backend/tests/fixtures/evaluation/consumer-retail-001.pdf",
+      "company_profile": "合成社区生鲜和即时零售企业材料，包含同店销售、存货和冷链投资",
+      "fixed_event": {
+        "title": "核心区域同店销售继续下降 12%",
+        "description": "核心区域同店销售继续下降约 12%，需要重新核验门店现金流、存货损耗和冷链投资计划。",
+        "source_type": "user_input"
+      },
+      "required_outputs": ["claims", "financing_needs", "action_recommendations", "business_event_impact"]
+    },
+    {
+      "id": "pharma-biotech-001",
+      "stage": "multi_industry",
+      "industry": "医药研发",
+      "material": "backend/tests/fixtures/evaluation/pharma-biotech-001.pdf",
+      "company_profile": "合成创新药研发企业材料，包含研发投入、现金消耗和生产线预算",
+      "fixed_event": {
+        "title": "核心产品注册申报延期 9 个月",
+        "description": "核心产品注册申报预计延期约 9 个月，需要重新评估现金消耗、合作付款和生产线建设融资需求。",
+        "source_type": "user_input"
+      },
+      "required_outputs": ["claims", "financing_needs", "action_recommendations", "business_event_impact"]
+    },
+    {
+      "id": "tech-software-001",
+      "stage": "multi_industry",
+      "industry": "工业软件",
+      "material": "backend/tests/fixtures/evaluation/tech-software-001.pdf",
+      "company_profile": "合成订阅制工业软件企业材料，包含续费率、合同负债和交付中心预算",
+      "fixed_event": {
+        "title": "三个核心客户暂停续费",
+        "description": "三个核心客户暂停下一年度续费，需要重新核验经常性收入、回款和交付中心投资计划。",
+        "source_type": "user_input"
+      },
+      "required_outputs": ["claims", "financing_needs", "action_recommendations", "business_event_impact"]
+    }
+  ],
+  "common_acceptance_checks": [
+    "关键判断和融资需求能够关联材料证据或明确标记待核验",
+    "融资需求保留金额原文，不由模型猜测金额",
+    "事件影响结果保存受影响资产、证据缺口和建议动作",
+    "事件影响不会自动覆盖判断或创建已确认行动",
+    "人工确认后存在不可变审计记录",
+    "其他用户无法读取该案例资产"
+  ],
+  "manual_score_fields": [
+    "fact_accuracy",
+    "numeric_traceability",
+    "citation_coverage",
+    "financing_need_quality",
+    "event_impact_quality",
+    "human_edit_distance"
+  ]
+}
